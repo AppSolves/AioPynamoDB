@@ -13,8 +13,8 @@ Suppose you have defined a BankStatement model, like in the example below.
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import BooleanAttribute, NumberAttribute, UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import BooleanAttribute, NumberAttribute, UnicodeAttribute
 
     class BankStatement(Model):
         class Meta:
@@ -39,8 +39,8 @@ Here's an example of using a context manager for a :py:class:`TransactWrite <pyn
 
 .. code-block:: python
 
-    from pynamodb.connection import Connection
-    from pynamodb.transactions import TransactWrite
+    from aiopynamodb.connection import Connection
+    from aiopynamodb.transactions import TransactWrite
 
     # Two existing bank statements in the following states
     user1_statement = BankStatement('user1', account_balance=2000, is_active=True)
@@ -79,7 +79,7 @@ Now, say you make another attempt to debit one of the accounts when they don't h
 
 .. code-block:: python
 
-    from pynamodb.exceptions import TransactWriteError
+    from aiopynamodb.exceptions import TransactWriteError
 
     assert user1_statement.account_balance == 1000
     assert user2_statement.account_balance == 1000

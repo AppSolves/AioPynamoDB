@@ -9,8 +9,8 @@ Here is an example showing how to enable logging for PynamoDB:
 .. code-block:: python
 
     import logging
-    from pynamodb.models import Model
-    from pynamodb.attributes import (
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import (
         UnicodeAttribute, NumberAttribute
     )
 

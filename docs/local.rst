@@ -21,8 +21,8 @@ that your server is listening on.
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
 
     class Thread(Model):

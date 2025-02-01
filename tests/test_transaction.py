@@ -1,11 +1,11 @@
 import pytest
-from pynamodb.attributes import NumberAttribute, UnicodeAttribute, VersionAttribute
+from aiopynamodb.attributes import NumberAttribute, UnicodeAttribute, VersionAttribute
 
-from pynamodb.connection import Connection
-from pynamodb.connection.base import MetaTable
-from pynamodb.constants import TABLE_KEY
-from pynamodb.transactions import Transaction, TransactGet, TransactWrite
-from pynamodb.models import Model
+from aiopynamodb.connection import Connection
+from aiopynamodb.connection.base import MetaTable
+from aiopynamodb.constants import TABLE_KEY
+from aiopynamodb.transactions import Transaction, TransactGet, TransactWrite
+from aiopynamodb.models import Model
 from tests.test_base_connection import PATCH_METHOD
 
 from unittest.mock import patch
@@ -58,13 +58,14 @@ class TestTransaction:
 
 class TestTransactGet:
 
-    def test_commit(self, mocker):
+    @pytest.mark.asyncio
+    async def test_commit(self, mocker):
         connection = Connection()
         connection.add_meta_table(MetaTable(MOCK_TABLE_DESCRIPTOR[TABLE_KEY]))
 
         mock_connection_transact_get = mocker.patch.object(connection, 'transact_get_items')
 
-        with TransactGet(connection=connection) as t:
+        async with TransactGet(connection=connection) as t:
             t.get(MockModel, 1, 2)
 
         mock_connection_transact_get.assert_called_once_with(
@@ -75,15 +76,17 @@ class TestTransactGet:
 
 class TestTransactWrite:
 
-    def test_condition_check__no_condition(self):
+    @pytest.mark.asyncio
+    async def test_condition_check__no_condition(self):
         with pytest.raises(TypeError):
-            with TransactWrite(connection=Connection()) as transaction:
+            async with TransactWrite(connection=Connection()) as transaction:
                 transaction.condition_check(MockModel, hash_key=1, condition=None)
 
-    def test_commit(self, mocker):
+    @pytest.mark.asyncio
+    async def test_commit(self, mocker):
         connection = Connection()
         mock_connection_transact_write = mocker.patch.object(connection, 'transact_write_items')
-        with TransactWrite(connection=connection) as t:
+        async with TransactWrite(connection=connection) as t:
             t.condition_check(MockModel, 1, 3, condition=(MockModel.mock_hash.does_not_exist()))
             t.delete(MockModel(2, 4))
             t.save(MockModel(3, 5))

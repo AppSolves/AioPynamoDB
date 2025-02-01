@@ -2,19 +2,20 @@
 Lowest level connection
 """
 import logging
+import asyncio
 import uuid
 from threading import local
 from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
-import botocore.client
+import aiobotocore.client
 import botocore.exceptions
 from botocore.client import ClientError
 from botocore.exceptions import BotoCoreError
-from botocore.session import get_session
+from aiobotocore.session import get_session
 
-from pynamodb.connection._botocore_private import BotocoreBaseClientPrivate
-from pynamodb._util import bin_decode_attr
-from pynamodb.constants import (
+from aiopynamodb.connection._botocore_private import BotocoreBaseClientPrivate
+from aiopynamodb._util import bin_decode_attr
+from aiopynamodb.constants import (
     RETURN_CONSUMED_CAPACITY_VALUES, RETURN_ITEM_COLL_METRICS_VALUES,
     RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY, RETURN_VALUES_VALUES,
     EXCLUSIVE_START_KEY, SCAN_INDEX_FORWARD, ATTR_DEFINITIONS,
@@ -37,18 +38,18 @@ from pynamodb.constants import (
     AVAILABLE_BILLING_MODES, DEFAULT_BILLING_MODE, BILLING_MODE, PAY_PER_REQUEST_BILLING_MODE,
     PROVISIONED_BILLING_MODE, TIME_TO_LIVE_SPECIFICATION, ENABLED, UPDATE_TIME_TO_LIVE, TAGS, VALUE
 )
-from pynamodb.exceptions import (
+from aiopynamodb.exceptions import (
     TableError, QueryError, PutError, DeleteError, UpdateError, GetError, ScanError, TableDoesNotExist,
     VerboseClientError,
     TransactGetError, TransactWriteError, CancellationReason,
 )
-from pynamodb.expressions.condition import Condition
-from pynamodb.expressions.operand import Path
-from pynamodb.expressions.projection import create_projection_expression
-from pynamodb.expressions.update import Action, Update
-from pynamodb.settings import get_settings_value
-from pynamodb.signals import pre_dynamodb_send, post_dynamodb_send
-from pynamodb.types import HASH, RANGE
+from aiopynamodb.expressions.condition import Condition
+from aiopynamodb.expressions.operand import Path
+from aiopynamodb.expressions.projection import create_projection_expression
+from aiopynamodb.expressions.update import Action, Update
+from aiopynamodb.settings import get_settings_value
+from aiopynamodb.signals import pre_dynamodb_send, post_dynamodb_send
+from aiopynamodb.types import HASH, RANGE
 
 BOTOCORE_EXCEPTIONS = (BotoCoreError, ClientError)
 RATE_LIMITING_ERROR_CODES = ['ProvisionedThroughputExceededException', 'ThrottlingException']
@@ -256,6 +257,7 @@ class Connection(object):
         self.host = host
         self._local = local()
         self._client: Optional[BotocoreBaseClientPrivate] = None
+        self._client_loop: Optional[asyncio.AbstractEventLoop] = None
         self._convert_to_request_dict__endpoint_url = False
         if region:
             self.region = region
@@ -294,11 +296,16 @@ class Connection(object):
     def __repr__(self) -> str:
         return "Connection<{}>".format(self.client.meta.endpoint_url)
 
-    def dispatch(self, operation_name: str, operation_kwargs: Dict) -> Dict:
+    async def open(self):
+        """
+
+        """
+        await self.get_client()
+
+
+    async def dispatch(self, operation_name: str, operation_kwargs: Dict) -> Dict:
         """
         Dispatches `operation_name` with arguments `operation_kwargs`
-
-        Raises TableDoesNotExist if the specified table does not exist
         """
         if operation_name not in [DESCRIBE_TABLE, LIST_TABLES, UPDATE_TABLE, UPDATE_TIME_TO_LIVE, DELETE_TABLE, CREATE_TABLE]:
             if RETURN_CONSUMED_CAPACITY not in operation_kwargs:
@@ -309,14 +316,14 @@ class Connection(object):
         req_uuid = uuid.uuid4()
 
         self.send_pre_boto_callback(operation_name, req_uuid, table_name)
-        data = self._make_api_call(operation_name, operation_kwargs)
+        data = await self._make_api_call(operation_name, operation_kwargs)
         self.send_post_boto_callback(operation_name, req_uuid, table_name)
 
         if data and CONSUMED_CAPACITY in data:
             capacity = data.get(CONSUMED_CAPACITY)
             if isinstance(capacity, dict) and CAPACITY_UNITS in capacity:
                 capacity = capacity.get(CAPACITY_UNITS)
-            log.debug("%s %s consumed %s units",  data.get(TABLE_NAME, ''), operation_name, capacity)
+            log.debug("%s %s consumed %s units", data.get(TABLE_NAME, ''), operation_name, capacity)
         return data
 
     def send_post_boto_callback(self, operation_name, req_uuid, table_name):
@@ -335,9 +342,10 @@ class Connection(object):
         if self._extra_headers is not None:
             request.headers.update(self._extra_headers)
 
-    def _make_api_call(self, operation_name: str, operation_kwargs: Dict) -> Dict:
+    async def _make_api_call(self, operation_name: str, operation_kwargs: Dict) -> Dict:
+        await self.open()
         try:
-            return self.client._make_api_call(operation_name, operation_kwargs)
+            return await self._client._make_api_call(operation_name, operation_kwargs)
         except ClientError as e:
             resp_metadata = e.response.get('ResponseMetadata', {}).get('HTTPHeaders', {})
             cancellation_reasons = e.response.get('CancellationReasons', [])
@@ -376,7 +384,7 @@ class Connection(object):
         return operation_kwargs.get(TABLE_NAME)
 
     @property
-    def session(self) -> botocore.session.Session:
+    def session(self) -> aiobotocore.session.AioSession:
         """
         Returns a valid botocore session
         """
@@ -394,13 +402,21 @@ class Connection(object):
         """
         Returns a botocore dynamodb client
         """
-        # botocore has a known issue where it will cache empty credentials
-        # https://github.com/boto/botocore/blob/4d55c9b4142/botocore/credentials.py#L1016-L1021
-        # if the client does not have credentials, we create a new client
-        # otherwise the client is permanently poisoned in the case of metadata service flakiness when using IAM roles
-        if not self._client or (self._client._request_signer and not self._client._request_signer._credentials):
+        return self._client
+
+    async def get_client(self) -> aiobotocore.client.AioBaseClient:
+        current_loop = asyncio.get_event_loop()
+
+        # Close existing client if it's from a different loop
+        if self._client is not None and self._client_loop is not current_loop:
+            await self._client.close()
+            self._client = None
+            self._client_loop = None
+            print('closed client')
+
+        if self._client is None:
             config = botocore.client.Config(
-                parameter_validation=False,  # Disable unnecessary validation for performance
+                parameter_validation=False,
                 connect_timeout=self._connect_timeout_seconds,
                 read_timeout=self._read_timeout_seconds,
                 max_pool_connections=self._max_pool_connections,
@@ -409,10 +425,35 @@ class Connection(object):
                     'mode': 'standard',
                 }
             )
-            self._client = cast(BotocoreBaseClientPrivate, self.session.create_client(SERVICE_NAME, self.region, endpoint_url=self.host, config=config))
-
+            # Set credentials if provided
+            session = get_session()
+            if self._aws_access_key_id and self._aws_secret_access_key:
+                session.set_credentials(
+                    self._aws_access_key_id,
+                    self._aws_secret_access_key,
+                    self._aws_session_token
+                )
+            # Create new client context
+            client_context = session.create_client(
+                service_name=SERVICE_NAME,
+                region_name=self.region,
+                endpoint_url=self.host,
+                config=config,
+            )
+            # Async enter to get the client
+            self._client = await client_context.__aenter__()
             self._client.meta.events.register_first('before-send.*.*', self._before_send)
+            self._client_loop = current_loop
+
         return self._client
+
+    async def close(self):
+        """Close the client if it exists."""
+        if self._client:
+            await self._client.close()
+            self._client = None
+            self._client_loop = None
+
 
     def add_meta_table(self, meta_table: MetaTable) -> None:
         """
@@ -431,7 +472,7 @@ class Connection(object):
         except KeyError:
             raise TableError(f"Meta-table for '{table_name}' not initialized") from None
 
-    def create_table(
+    async def create_table(
         self,
         table_name: str,
         attribute_definitions: Optional[Any] = None,
@@ -521,12 +562,12 @@ class Connection(object):
             ]
 
         try:
-            data = self.dispatch(CREATE_TABLE, operation_kwargs)
+            data = await self.dispatch(CREATE_TABLE, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise TableError("Failed to create table: {}".format(e), e)
         return data
 
-    def update_time_to_live(self, table_name: str, ttl_attribute_name: str) -> Dict:
+    async def update_time_to_live(self, table_name: str, ttl_attribute_name: str) -> Dict:
         """
         Performs the UpdateTimeToLive operation
         """
@@ -538,11 +579,11 @@ class Connection(object):
             }
         }
         try:
-            return self.dispatch(UPDATE_TIME_TO_LIVE, operation_kwargs)
+            return await self.dispatch(UPDATE_TIME_TO_LIVE, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise TableError("Failed to update TTL on table: {}".format(e), e)
 
-    def delete_table(self, table_name: str) -> Dict:
+    async def delete_table(self, table_name: str) -> Dict:
         """
         Performs the DeleteTable operation
         """
@@ -550,12 +591,12 @@ class Connection(object):
             TABLE_NAME: table_name
         }
         try:
-            data = self.dispatch(DELETE_TABLE, operation_kwargs)
+            data = await self.dispatch(DELETE_TABLE, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise TableError("Failed to delete table: {}".format(e), e)
         return data
 
-    def update_table(
+    async def update_table(
         self,
         table_name: str,
         read_capacity_units: Optional[int] = None,
@@ -589,11 +630,11 @@ class Connection(object):
                 })
             operation_kwargs[GLOBAL_SECONDARY_INDEX_UPDATES] = global_secondary_indexes_list
         try:
-            return self.dispatch(UPDATE_TABLE, operation_kwargs)
+            return await self.dispatch(UPDATE_TABLE, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise TableError("Failed to update table: {}".format(e), e)
 
-    def list_tables(
+    async def list_tables(
         self,
         exclusive_start_table_name: Optional[str] = None,
         limit: Optional[int] = None,
@@ -611,11 +652,11 @@ class Connection(object):
                 LIMIT: limit
             })
         try:
-            return self.dispatch(LIST_TABLES, operation_kwargs)
+            return await self.dispatch(LIST_TABLES, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise TableError("Unable to list tables: {}".format(e), e)
 
-    def describe_table(self, table_name: str) -> Dict:
+    async def describe_table(self, table_name: str) -> Dict:
         """
         Performs the DescribeTable operation
         """
@@ -623,7 +664,7 @@ class Connection(object):
             TABLE_NAME: table_name
         }
         try:
-            data = self.dispatch(DESCRIBE_TABLE, operation_kwargs)
+            data = await self.dispatch(DESCRIBE_TABLE, operation_kwargs)
             table_data = data.get(TABLE_KEY)
             # For compatibility with existing code which uses Connection directly,
             # we can let DescribeTable set the meta table.
@@ -820,7 +861,7 @@ class Connection(object):
             operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
         return operation_kwargs
 
-    def delete_item(
+    async def delete_item(
         self,
         table_name: str,
         hash_key: str,
@@ -843,11 +884,11 @@ class Connection(object):
             return_item_collection_metrics=return_item_collection_metrics
         )
         try:
-            return self.dispatch(DELETE_ITEM, operation_kwargs)
+            return await self.dispatch(DELETE_ITEM, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise DeleteError("Failed to delete item: {}".format(e), e)
 
-    def update_item(
+    async def update_item(
         self,
         table_name: str,
         hash_key: str,
@@ -875,11 +916,11 @@ class Connection(object):
             return_item_collection_metrics=return_item_collection_metrics,
         )
         try:
-            return self.dispatch(UPDATE_ITEM, operation_kwargs)
+            return await self.dispatch(UPDATE_ITEM, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise UpdateError("Failed to update item: {}".format(e), e)
 
-    def put_item(
+    async def put_item(
         self,
         table_name: str,
         hash_key: str,
@@ -905,7 +946,7 @@ class Connection(object):
             return_item_collection_metrics=return_item_collection_metrics
         )
         try:
-            return self.dispatch(PUT_ITEM, operation_kwargs)
+            return await self.dispatch(PUT_ITEM, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise PutError("Failed to put item: {}".format(e), e)
 
@@ -925,7 +966,7 @@ class Connection(object):
 
         return operation_kwargs
 
-    def transact_write_items(
+    async def transact_write_items(
         self,
         condition_check_items: Sequence[Dict],
         delete_items: Sequence[Dict],
@@ -960,11 +1001,11 @@ class Connection(object):
         operation_kwargs[TRANSACT_ITEMS] = transact_items
 
         try:
-            return self.dispatch(TRANSACT_WRITE_ITEMS, operation_kwargs)
+            return await self.dispatch(TRANSACT_WRITE_ITEMS, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise TransactWriteError("Failed to write transaction items", e)
 
-    def transact_get_items(
+    async def transact_get_items(
         self,
         get_items: Sequence[Dict],
         return_consumed_capacity: Optional[str] = None,
@@ -978,11 +1019,11 @@ class Connection(object):
         ]
 
         try:
-            return self.dispatch(TRANSACT_GET_ITEMS, operation_kwargs)
+            return await self.dispatch(TRANSACT_GET_ITEMS, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise TransactGetError("Failed to get transaction items", e)
 
-    def batch_write_item(
+    async def batch_write_item(
         self,
         table_name: str,
         put_items: Optional[Any] = None,
@@ -1018,11 +1059,11 @@ class Connection(object):
                 })
         operation_kwargs[REQUEST_ITEMS][table_name] = delete_items_list + put_items_list
         try:
-            return self.dispatch(BATCH_WRITE_ITEM, operation_kwargs)
+            return await self.dispatch(BATCH_WRITE_ITEM, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise PutError("Failed to batch write items: {}".format(e), e)
 
-    def batch_get_item(
+    async def batch_get_item(
         self,
         table_name: str,
         keys: Sequence[str],
@@ -1059,11 +1100,11 @@ class Connection(object):
             )
         operation_kwargs[REQUEST_ITEMS][table_name].update(keys_map)
         try:
-            return self.dispatch(BATCH_GET_ITEM, operation_kwargs)
+            return await self.dispatch(BATCH_GET_ITEM, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise GetError("Failed to batch get items: {}".format(e), e)
 
-    def get_item(
+    async def get_item(
         self,
         table_name: str,
         hash_key: str,
@@ -1082,11 +1123,11 @@ class Connection(object):
             attributes_to_get=attributes_to_get
         )
         try:
-            return self.dispatch(GET_ITEM, operation_kwargs)
+            return await self.dispatch(GET_ITEM, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise GetError("Failed to get item: {}".format(e), e)
 
-    def scan(
+    async def scan(
         self,
         table_name: str,
         filter_condition: Optional[Any] = None,
@@ -1134,11 +1175,11 @@ class Connection(object):
             operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
 
         try:
-            return self.dispatch(SCAN, operation_kwargs)
+            return await self.dispatch(SCAN, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise ScanError("Failed to scan table: {}".format(e), e)
 
-    def query(
+    async def query(
         self,
         table_name: str,
         hash_key: str,
@@ -1208,7 +1249,7 @@ class Connection(object):
             operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
 
         try:
-            return self.dispatch(QUERY, operation_kwargs)
+            return await self.dispatch(QUERY, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise QueryError("Failed to query items: {}".format(e), e)
 

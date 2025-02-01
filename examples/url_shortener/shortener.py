@@ -4,9 +4,9 @@ A fully working url shortener example
 import flask
 from hashlib import md5
 from base64 import b64encode
-from pynamodb.models import Model
-from pynamodb.indexes import GlobalSecondaryIndex, AllProjection
-from pynamodb.attributes import UnicodeAttribute
+from aiopynamodb.models import Model
+from aiopynamodb.indexes import GlobalSecondaryIndex, AllProjection
+from aiopynamodb.attributes import UnicodeAttribute
 
 
 class Url(Model):

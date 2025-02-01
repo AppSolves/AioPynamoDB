@@ -16,7 +16,7 @@ If for some reason you can't use conventional AWS configuration methods, you can
 
 .. code-block:: python
 
-    from pynamodb.models import Model
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         class Meta:

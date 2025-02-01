@@ -2,14 +2,14 @@ from typing_extensions import assert_type
 
 
 def test_transact_write() -> None:
-    from pynamodb.transactions import TransactWrite
+    from aiopynamodb.transactions import TransactWrite
     with TransactWrite() as tx:
         assert_type(tx, TransactWrite)
 
 
 def test_transact_get() -> None:
-    from pynamodb.transactions import TransactGet
-    from pynamodb.models import Model, _ModelFuture
+    from aiopynamodb.transactions import TransactGet
+    from aiopynamodb.models import Model, _ModelFuture
 
     class FirstModel(Model):
         pass

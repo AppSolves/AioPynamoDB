@@ -21,8 +21,8 @@ Indexes are defined as classes, just like models. Here is a simple index class:
 
 .. code-block:: python
 
-    from pynamodb.indexes import GlobalSecondaryIndex, AllProjection
-    from pynamodb.attributes import NumberAttribute
+    from aiopynamodb.indexes import GlobalSecondaryIndex, AllProjection
+    from aiopynamodb.attributes import NumberAttribute
 
 
     class ViewIndex(GlobalSecondaryIndex):
@@ -57,8 +57,8 @@ a class attribute on the model, as in this example:
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
 
     class TestModel(Model):
@@ -80,8 +80,8 @@ Local secondary indexes are defined just like global ones, but they inherit from
 
 .. code-block:: python
 
-    from pynamodb.indexes import LocalSecondaryIndex, AllProjection
-    from pynamodb.attributes import NumberAttribute
+    from aiopynamodb.indexes import LocalSecondaryIndex, AllProjection
+    from aiopynamodb.attributes import NumberAttribute
 
 
     class ViewIndex(LocalSecondaryIndex):

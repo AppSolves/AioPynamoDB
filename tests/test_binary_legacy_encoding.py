@@ -1,8 +1,8 @@
 import pytest
 
-from pynamodb.attributes import BinaryAttribute
-from pynamodb.attributes import MapAttribute
-from pynamodb.models import Model
+from aiopynamodb.attributes import BinaryAttribute
+from aiopynamodb.attributes import MapAttribute
+from aiopynamodb.models import Model
 
 
 def test_legacy_encoding__model() -> None:

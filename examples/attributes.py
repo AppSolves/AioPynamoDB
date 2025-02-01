@@ -4,10 +4,10 @@ A PynamoDB example using a custom attribute
 import pickle
 from typing import Any
 
-from pynamodb.attributes import Attribute
-from pynamodb.attributes import UnicodeAttribute
-from pynamodb.constants import BINARY
-from pynamodb.models import Model
+from aiopynamodb.attributes import Attribute
+from aiopynamodb.attributes import UnicodeAttribute
+from aiopynamodb.constants import BINARY
+from aiopynamodb.models import Model
 
 
 class Color(object):

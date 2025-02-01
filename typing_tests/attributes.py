@@ -5,8 +5,8 @@ from typing_extensions import assert_type
 
 
 def test_number_attribute() -> None:
-    from pynamodb.attributes import NumberAttribute
-    from pynamodb.models import Model
+    from aiopynamodb.attributes import NumberAttribute
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         my_attr = NumberAttribute()
@@ -16,8 +16,8 @@ def test_number_attribute() -> None:
 
 
 def test_unicode_attribute() -> None:
-    from pynamodb.attributes import UnicodeAttribute
-    from pynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         my_attr = UnicodeAttribute()
@@ -27,8 +27,8 @@ def test_unicode_attribute() -> None:
 
 
 def test_map_attribute() -> None:
-    from pynamodb.attributes import MapAttribute, UnicodeAttribute
-    from pynamodb.models import Model
+    from aiopynamodb.attributes import MapAttribute, UnicodeAttribute
+    from aiopynamodb.models import Model
 
     class MySubMap(MapAttribute):
         s = UnicodeAttribute()
@@ -54,8 +54,8 @@ def test_map_attribute() -> None:
 
 
 def test_list_attribute() -> None:
-    from pynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute
-    from pynamodb.models import Model
+    from aiopynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute
+    from aiopynamodb.models import Model
 
     class MyMap(MapAttribute):
         my_sub_attr = UnicodeAttribute()

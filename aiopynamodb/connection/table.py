@@ -5,10 +5,10 @@ PynamoDB Connection classes
 
 from typing import Any, Dict, Mapping, Optional, Sequence
 
-from pynamodb.connection.base import Connection, MetaTable
-from pynamodb.constants import DEFAULT_BILLING_MODE, KEY
-from pynamodb.expressions.condition import Condition
-from pynamodb.expressions.update import Action
+from aiopynamodb.connection.base import Connection, MetaTable
+from aiopynamodb.constants import DEFAULT_BILLING_MODE, KEY
+from aiopynamodb.expressions.condition import Condition
+from aiopynamodb.expressions.update import Action
 
 
 class TableConnection:
@@ -84,7 +84,7 @@ class TableConnection:
             return_values_on_condition_failure=return_values_on_condition_failure
         )
 
-    def delete_item(
+    async def delete_item(
         self,
         hash_key: str,
         range_key: Optional[str] = None,
@@ -96,7 +96,7 @@ class TableConnection:
         """
         Performs the DeleteItem operation and returns the result
         """
-        return self.connection.delete_item(
+        return await self.connection.delete_item(
             self.table_name,
             hash_key,
             range_key=range_key,
@@ -106,7 +106,7 @@ class TableConnection:
             return_item_collection_metrics=return_item_collection_metrics,
         )
 
-    def update_item(
+    async def update_item(
         self,
         hash_key: str,
         range_key: Optional[str] = None,
@@ -119,7 +119,7 @@ class TableConnection:
         """
         Performs the UpdateItem operation
         """
-        return self.connection.update_item(
+        return await self.connection.update_item(
             self.table_name,
             hash_key,
             range_key=range_key,
@@ -130,7 +130,7 @@ class TableConnection:
             return_values=return_values,
         )
 
-    def put_item(
+    async def put_item(
         self,
         hash_key: str,
         range_key: Optional[str] = None,
@@ -143,7 +143,7 @@ class TableConnection:
         """
         Performs the PutItem operation and returns the result
         """
-        return self.connection.put_item(
+        return await self.connection.put_item(
             self.table_name,
             hash_key,
             range_key=range_key,
@@ -154,7 +154,7 @@ class TableConnection:
             return_item_collection_metrics=return_item_collection_metrics,
         )
 
-    def batch_write_item(
+    async def batch_write_item(
         self,
         put_items: Optional[Any] = None,
         delete_items: Optional[Any] = None,
@@ -164,7 +164,7 @@ class TableConnection:
         """
         Performs the batch_write_item operation
         """
-        return self.connection.batch_write_item(
+        return await self.connection.batch_write_item(
             self.table_name,
             put_items=put_items,
             delete_items=delete_items,
@@ -172,7 +172,7 @@ class TableConnection:
             return_item_collection_metrics=return_item_collection_metrics,
         )
 
-    def batch_get_item(
+    async def batch_get_item(
         self,
         keys: Sequence[str],
         consistent_read: Optional[bool] = None,
@@ -182,7 +182,7 @@ class TableConnection:
         """
         Performs the batch get item operation
         """
-        return self.connection.batch_get_item(
+        return await self.connection.batch_get_item(
             self.table_name,
             keys,
             consistent_read=consistent_read,
@@ -190,7 +190,7 @@ class TableConnection:
             attributes_to_get=attributes_to_get,
         )
 
-    def get_item(
+    async def get_item(
         self,
         hash_key: str,
         range_key: Optional[str] = None,
@@ -200,7 +200,7 @@ class TableConnection:
         """
         Performs the GetItem operation and returns the result
         """
-        return self.connection.get_item(
+        return await self.connection.get_item(
             self.table_name,
             hash_key,
             range_key=range_key,
@@ -208,7 +208,7 @@ class TableConnection:
             attributes_to_get=attributes_to_get,
         )
 
-    def scan(
+    async def scan(
         self,
         filter_condition: Optional[Any] = None,
         attributes_to_get: Optional[Any] = None,
@@ -223,7 +223,7 @@ class TableConnection:
         """
         Performs the scan operation
         """
-        return self.connection.scan(
+        return await self.connection.scan(
             self.table_name,
             filter_condition=filter_condition,
             attributes_to_get=attributes_to_get,
@@ -236,7 +236,7 @@ class TableConnection:
             index_name=index_name,
         )
 
-    def query(
+    async def query(
         self,
         hash_key: str,
         range_key_condition: Optional[Condition] = None,
@@ -253,7 +253,7 @@ class TableConnection:
         """
         Performs the Query operation and returns the result
         """
-        return self.connection.query(
+        return await self.connection.query(
             self.table_name,
             hash_key,
             range_key_condition=range_key_condition,
@@ -268,25 +268,25 @@ class TableConnection:
             select=select,
         )
 
-    def describe_table(self) -> Dict:
+    async def describe_table(self) -> Dict:
         """
         Performs the DescribeTable operation and returns the result
         """
-        return self.connection.describe_table(self.table_name)
+        return await self.connection.describe_table(self.table_name)
 
-    def delete_table(self) -> Dict:
+    async def delete_table(self) -> Dict:
         """
         Performs the DeleteTable operation and returns the result
         """
-        return self.connection.delete_table(self.table_name)
+        return await self.connection.delete_table(self.table_name)
 
-    def update_time_to_live(self, ttl_attr_name: str) -> Dict:
+    async def update_time_to_live(self, ttl_attr_name: str) -> Dict:
         """
         Performs the UpdateTimeToLive operation and returns the result
         """
-        return self.connection.update_time_to_live(self.table_name, ttl_attr_name)
+        return await self.connection.update_time_to_live(self.table_name, ttl_attr_name)
 
-    def update_table(
+    async def update_table(
         self,
         read_capacity_units: Optional[int] = None,
         write_capacity_units: Optional[int] = None,
@@ -295,13 +295,13 @@ class TableConnection:
         """
         Performs the UpdateTable operation and returns the result
         """
-        return self.connection.update_table(
+        return await self.connection.update_table(
             self.table_name,
             read_capacity_units=read_capacity_units,
             write_capacity_units=write_capacity_units,
             global_secondary_index_updates=global_secondary_index_updates)
 
-    def create_table(
+    async def create_table(
         self,
         attribute_definitions: Optional[Any] = None,
         key_schema: Optional[Any] = None,
@@ -316,7 +316,7 @@ class TableConnection:
         """
         Performs the CreateTable operation and returns the result
         """
-        return self.connection.create_table(
+        return await self.connection.create_table(
             self.table_name,
             attribute_definitions=attribute_definitions,
             key_schema=key_schema,

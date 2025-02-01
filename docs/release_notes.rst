@@ -1279,8 +1279,8 @@ The old way:
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
 
     class Thread(Model):
@@ -1291,8 +1291,8 @@ The new way:
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
 
     class Thread(Model):

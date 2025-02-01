@@ -17,34 +17,34 @@ from inspect import getmembers
 from typing import Any, Callable, Dict, Generic, List, Mapping, Optional, TypeVar, Type, Union, Set, overload, Iterable
 from typing import TYPE_CHECKING
 
-from pynamodb._util import attr_value_to_simple_dict
-from pynamodb._util import bin_decode_attr
-from pynamodb._util import bin_encode_attr
-from pynamodb._util import simple_dict_to_attr_value
-from pynamodb.constants import BINARY
-from pynamodb.constants import BINARY_SET
-from pynamodb.constants import BOOLEAN
-from pynamodb.constants import DATETIME_FORMAT
-from pynamodb.constants import LIST
-from pynamodb.constants import MAP
-from pynamodb.constants import NULL
-from pynamodb.constants import NUMBER
-from pynamodb.constants import NUMBER_SET
-from pynamodb.constants import STRING
-from pynamodb.constants import STRING_SET
-from pynamodb.exceptions import AttributeDeserializationError
-from pynamodb.exceptions import AttributeNullError
-from pynamodb.expressions.operand import Path
+from aiopynamodb._util import attr_value_to_simple_dict
+from aiopynamodb._util import bin_decode_attr
+from aiopynamodb._util import bin_encode_attr
+from aiopynamodb._util import simple_dict_to_attr_value
+from aiopynamodb.constants import BINARY
+from aiopynamodb.constants import BINARY_SET
+from aiopynamodb.constants import BOOLEAN
+from aiopynamodb.constants import DATETIME_FORMAT
+from aiopynamodb.constants import LIST
+from aiopynamodb.constants import MAP
+from aiopynamodb.constants import NULL
+from aiopynamodb.constants import NUMBER
+from aiopynamodb.constants import NUMBER_SET
+from aiopynamodb.constants import STRING
+from aiopynamodb.constants import STRING_SET
+from aiopynamodb.exceptions import AttributeDeserializationError
+from aiopynamodb.exceptions import AttributeNullError
+from aiopynamodb.expressions.operand import Path
 
 
 if TYPE_CHECKING:
-    from pynamodb.expressions.condition import (
+    from aiopynamodb.expressions.condition import (
         BeginsWith, Between, Comparison, Contains, NotExists, Exists, In
     )
-    from pynamodb.expressions.operand import (
+    from aiopynamodb.expressions.operand import (
         _Decrement, _IfNotExists, _Increment, _ListAppend
     )
-    from pynamodb.expressions.update import (
+    from aiopynamodb.expressions.update import (
         AddAction, DeleteAction, RemoveAction, SetAction
     )
 

@@ -2,12 +2,12 @@ from typing import Any
 from typing import Dict
 from unittest import TestCase
 
-from pynamodb.attributes import ListAttribute, MapAttribute, NumberSetAttribute, UnicodeAttribute, UnicodeSetAttribute, \
+from aiopynamodb.attributes import ListAttribute, MapAttribute, NumberSetAttribute, UnicodeAttribute, UnicodeSetAttribute, \
     NumberAttribute
-from pynamodb.expressions.condition import Condition, size
-from pynamodb.expressions.operand import Path, Value
-from pynamodb.expressions.projection import create_projection_expression
-from pynamodb.expressions.update import Action, Update
+from aiopynamodb.expressions.condition import Condition, size
+from aiopynamodb.expressions.operand import Path, Value
+from aiopynamodb.expressions.projection import create_projection_expression
+from aiopynamodb.expressions.update import Action, Update
 
 
 class PathTestCase(TestCase):

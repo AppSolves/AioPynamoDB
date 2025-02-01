@@ -14,15 +14,15 @@ from typing import Set
 from unittest.mock import patch, call
 import pytest
 
-from pynamodb.attributes import (
+from aiopynamodb.attributes import (
     BinarySetAttribute, BinaryAttribute, DynamicMapAttribute, NumberSetAttribute, NumberAttribute,
     UnicodeAttribute, UnicodeSetAttribute, UTCDateTimeAttribute, BooleanAttribute, MapAttribute, NullAttribute,
     ListAttribute, JSONAttribute, TTLAttribute, VersionAttribute, Attribute)
-from pynamodb.constants import (
+from aiopynamodb.constants import (
     NUMBER, STRING, STRING_SET, NUMBER_SET, BINARY_SET,
     BINARY, BOOLEAN,
 )
-from pynamodb.models import Model
+from aiopynamodb.models import Model
 
 
 class AttributeTestMapAttribute(MapAttribute):

@@ -5,8 +5,8 @@ from typing_extensions import assert_type
 
 
 def test_model_count() -> None:
-    from pynamodb.models import Model
-    from pynamodb.expressions.operand import Path
+    from aiopynamodb.models import Model
+    from aiopynamodb.expressions.operand import Path
 
     class MyModel(Model):
         pass
@@ -15,8 +15,8 @@ def test_model_count() -> None:
 
 
 def test_model_query() -> None:
-    from pynamodb.attributes import NumberAttribute
-    from pynamodb.models import Model
+    from aiopynamodb.attributes import NumberAttribute
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         my_attr = NumberAttribute()
@@ -29,8 +29,8 @@ def test_model_query() -> None:
 
 
 def test_pagination() -> None:
-    from pynamodb.attributes import NumberAttribute
-    from pynamodb.models import Model
+    from aiopynamodb.attributes import NumberAttribute
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         my_attr = NumberAttribute()
@@ -43,8 +43,8 @@ def test_pagination() -> None:
 
 
 def test_model_update() -> None:
-    from pynamodb.attributes import NumberAttribute, UnicodeAttribute
-    from pynamodb.models import Model
+    from aiopynamodb.attributes import NumberAttribute, UnicodeAttribute
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         my_attr = NumberAttribute()
@@ -65,10 +65,10 @@ def test_model_update() -> None:
 
 
 def test_paths() -> None:
-    import pynamodb.expressions.operand
-    import pynamodb.expressions.condition
-    from pynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute
-    from pynamodb.models import Model
+    import aiopynamodb.expressions.operand
+    import aiopynamodb.expressions.condition
+    from aiopynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute
+    from aiopynamodb.models import Model
 
     class MyMap(MapAttribute):
         my_sub_attr = UnicodeAttribute()
@@ -77,18 +77,18 @@ def test_paths() -> None:
         my_list = ListAttribute(of=MyMap)
         my_map = MyMap()
 
-    assert_type(MyModel.my_list[0], pynamodb.expressions.operand.Path)
-    assert_type(MyModel.my_list[0] == MyModel(), pynamodb.expressions.condition.Comparison)
+    assert_type(MyModel.my_list[0], aiopynamodb.expressions.operand.Path)
+    assert_type(MyModel.my_list[0] == MyModel(), aiopynamodb.expressions.condition.Comparison)
     # the following string indexing is not type checked - not by mypy nor in runtime
-    assert_type(MyModel.my_list[0]['my_sub_attr'] == 'foobar', pynamodb.expressions.condition.Comparison)
-    assert_type(MyModel.my_map == 'foobar', pynamodb.expressions.condition.Comparison)
+    assert_type(MyModel.my_list[0]['my_sub_attr'] == 'foobar', aiopynamodb.expressions.condition.Comparison)
+    assert_type(MyModel.my_map == 'foobar', aiopynamodb.expressions.condition.Comparison)
 
 
 def test_index_query_scan() -> None:
-    from pynamodb.attributes import NumberAttribute
-    from pynamodb.models import Model
-    from pynamodb.indexes import GlobalSecondaryIndex
-    from pynamodb.pagination import ResultIterator
+    from aiopynamodb.attributes import NumberAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.indexes import GlobalSecondaryIndex
+    from aiopynamodb.pagination import ResultIterator
 
     class UntypedIndex(GlobalSecondaryIndex):
         bar = NumberAttribute(hash_key=True)
@@ -121,15 +121,15 @@ def test_index_query_scan() -> None:
 
 
 def test_map_attribute_derivation() -> None:
-    from pynamodb.attributes import MapAttribute
+    from aiopynamodb.attributes import MapAttribute
 
     class MyMap(MapAttribute, object):
         pass
 
 
 def test_is_in() -> None:
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
     class MyModel(Model):
         attr = UnicodeAttribute()
@@ -140,8 +140,8 @@ def test_is_in() -> None:
 
 
 def test_append() -> None:
-    from pynamodb.models import Model
-    from pynamodb.attributes import ListAttribute, NumberAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import ListAttribute, NumberAttribute
 
     class MyModel(Model):
         attr = ListAttribute(of=NumberAttribute)

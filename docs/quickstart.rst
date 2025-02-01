@@ -10,8 +10,8 @@ Let's create a simple model to describe users.
 
 ::
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
     class UserModel(Model):
         """

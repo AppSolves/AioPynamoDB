@@ -22,8 +22,8 @@ Previously null errors (persisting ``None`` into an attribute defined as ``null=
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute
 
     class Employee(MapAttribute):
       name = UnicodeAttribute(null=False)

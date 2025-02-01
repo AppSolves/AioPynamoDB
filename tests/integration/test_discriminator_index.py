@@ -1,21 +1,22 @@
 import pytest
 
-import pynamodb.exceptions
-from pynamodb.attributes import DiscriminatorAttribute
-from pynamodb.attributes import DynamicMapAttribute
-from pynamodb.attributes import ListAttribute
-from pynamodb.attributes import MapAttribute
-from pynamodb.attributes import NumberAttribute
-from pynamodb.attributes import UnicodeAttribute
-from pynamodb.indexes import AllProjection
-from pynamodb.models import Model
-from pynamodb.indexes import GlobalSecondaryIndex
+import aiopynamodb.exceptions
+from aiopynamodb.attributes import DiscriminatorAttribute
+from aiopynamodb.attributes import DynamicMapAttribute
+from aiopynamodb.attributes import ListAttribute
+from aiopynamodb.attributes import MapAttribute
+from aiopynamodb.attributes import NumberAttribute
+from aiopynamodb.attributes import UnicodeAttribute
+from aiopynamodb.indexes import AllProjection
+from aiopynamodb.models import Model
+from aiopynamodb.indexes import GlobalSecondaryIndex
 
 
 class TestDiscriminatorIndex:
 
     @pytest.mark.ddblocal
-    def test_create_table(self, ddb_url):
+    @pytest.mark.asyncio
+    async def test_create_table(self, ddb_url):
         class ParentModel(Model, discriminator='Parent'):
             class Meta:
                 host = ddb_url
@@ -48,26 +49,27 @@ class TestDiscriminatorIndex:
         # We're running `create_table` on the ParentModel, and expect it to know about child models
         # (through the discriminator association) and include all child models' indexes
         # during table creation.
-        ParentModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
+        await ParentModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
 
         model = ChildModel1()
         model.hash_key = 'hash_key1'
         model.index_key = 'bar'
-        model.save()
+        await model.save()
 
         model = ChildModel2()
         model.hash_key = 'hash_key2'
         model.index_key = 'baz'
-        model.save()
+        await model.save()
 
-        model = next(ChildModel1.child_index.query('bar'))
+        model = await anext(ChildModel1.child_index.query('bar'))
         assert isinstance(model, ChildModel1)
 
-        model = next(ChildModel2.child_index.query('baz'))
+        model = await anext(ChildModel2.child_index.query('baz'))
         assert isinstance(model, ChildModel2)
 
     @pytest.mark.ddblocal
-    def test_create_table__incompatible_indexes(self, ddb_url):
+    @pytest.mark.asyncio
+    async def test_create_table__incompatible_indexes(self, ddb_url):
         class ParentModel(Model, discriminator='Parent'):
             class Meta:
                 host = ddb_url
@@ -110,5 +112,5 @@ class TestDiscriminatorIndex:
         # Unlike `test_create_table`, we expect this to fail because the child indexes
         # attempt to use the same attribute name for different types, thus the resulting table's
         # AttributeDefinitions would have the same attribute appear twice with conflicting types.
-        with pytest.raises(pynamodb.exceptions.TableError, match="Cannot have two attributes with the same name"):
-            ParentModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
+        with pytest.raises(aiopynamodb.exceptions.TableError, match="Cannot have two attributes with the same name"):
+            await ParentModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)

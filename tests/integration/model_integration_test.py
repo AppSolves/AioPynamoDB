@@ -4,9 +4,9 @@ Integration tests for the model API
 
 from datetime import datetime
 
-from pynamodb.models import Model
-from pynamodb.indexes import GlobalSecondaryIndex, AllProjection, LocalSecondaryIndex
-from pynamodb.attributes import (
+from aiopynamodb.models import Model
+from aiopynamodb.indexes import GlobalSecondaryIndex, AllProjection, LocalSecondaryIndex
+from aiopynamodb.attributes import (
     UnicodeAttribute, BinaryAttribute, UTCDateTimeAttribute, NumberSetAttribute, NumberAttribute,
     VersionAttribute)
 
@@ -35,7 +35,8 @@ class GSIndex(GlobalSecondaryIndex):
 
 
 @pytest.mark.ddblocal
-def test_model_integration(ddb_url):
+@pytest.mark.asyncio
+async def test_model_integration(ddb_url):
 
     class TestModel(Model):
         """
@@ -55,59 +56,59 @@ def test_model_integration(ddb_url):
         scores = NumberSetAttribute()
         version = VersionAttribute()
 
-    if TestModel.exists():
-        TestModel.delete_table()
-    TestModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
+    if await TestModel.exists():
+        await TestModel.delete_table()
+    await TestModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
 
     obj = TestModel('1', '2')
-    obj.save()
-    obj.refresh()
+    await obj.save()
+    await obj.refresh()
     obj = TestModel('foo', 'bar')
-    obj.save()
+    await obj.save()
     TestModel('foo2', 'bar2')
     obj3 = TestModel('setitem', 'setrange', scores={1, 2.1})
-    obj3.save()
-    obj3.refresh()
+    await obj3.save()
+    await obj3.refresh()
 
-    with TestModel.batch_write() as batch:
+    async with TestModel.batch_write() as batch:
         items = [TestModel('hash-{}'.format(x), '{}'.format(x)) for x in range(10)]
         for item in items:
-            batch.save(item)
+            await batch.save(item)
 
     item_keys = [('hash-{}'.format(x), 'thread-{}'.format(x)) for x in range(10)]
 
-    for item in TestModel.batch_get(item_keys):
+    async for item in TestModel.batch_get(item_keys):
         print(item)
 
-    for item in TestModel.query('setitem', TestModel.thread.startswith('set')):
+    async for item in TestModel.query('setitem', TestModel.thread.startswith('set')):
         print("Query Item {}".format(item))
 
-    with TestModel.batch_write() as batch:
+    async with TestModel.batch_write() as batch:
         items = [TestModel('hash-{}'.format(x), '{}'.format(x)) for x in range(10)]
         for item in items:
             print("Batch delete")
-            batch.delete(item)
+            await batch.delete(item)
 
-    for item in TestModel.scan():
+    async for item in TestModel.scan():
         print("Scanned item: {}".format(item))
 
     tstamp = datetime.now()
     query_obj = TestModel('query_forum', 'query_thread')
     query_obj.forum = 'foo'
-    query_obj.save()
-    query_obj.update([TestModel.view.add(1)])
-    for item in TestModel.epoch_index.query(tstamp):
+    await query_obj.save()
+    await query_obj.update([TestModel.view.add(1)])
+    async for item in TestModel.epoch_index.query(tstamp):
         print("Item queried from index: {}".format(item))
 
-    for item in TestModel.view_index.query('foo', TestModel.view > 0):
+    async for item in TestModel.view_index.query('foo', TestModel.view > 0):
         print("Item queried from index: {}".format(item.view))
 
-    query_obj.update([TestModel.scores.set([])])
-    query_obj.refresh()
+    await query_obj.update([TestModel.scores.set([])])
+    await query_obj.refresh()
     assert query_obj.scores is None
 
-    print(query_obj.update([TestModel.view.add(1)], condition=TestModel.forum.exists()))
-    TestModel.delete_table()
+    print(await query_obj.update([TestModel.view.add(1)], condition=TestModel.forum.exists()))
+    await TestModel.delete_table()
 
 
 def test_can_inherit_version_attribute(ddb_url) -> None:

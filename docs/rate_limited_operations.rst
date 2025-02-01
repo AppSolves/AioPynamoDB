@@ -18,8 +18,8 @@ Suppose that you have defined a `User` Model for the examples below.
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import (
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import (
         UnicodeAttribute
     )
 

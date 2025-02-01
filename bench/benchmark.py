@@ -144,8 +144,8 @@ def patch_urllib3():
 # =============================================================================
 
 import os
-from pynamodb.models import Model
-from pynamodb.attributes import UnicodeAttribute, BooleanAttribute, MapAttribute, UTCDateTimeAttribute
+from aiopynamodb.models import Model
+from aiopynamodb.attributes import UnicodeAttribute, BooleanAttribute, MapAttribute, UTCDateTimeAttribute
 
 
 os.environ["AWS_ACCESS_KEY_ID"] = "1"

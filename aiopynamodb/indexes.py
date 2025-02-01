@@ -5,19 +5,19 @@ from inspect import getmembers
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
 from typing import TYPE_CHECKING
 
-from pynamodb._schema import IndexSchema, GlobalSecondaryIndexSchema
-from pynamodb._schema import ModelSchema
-from pynamodb.constants import (
+from aiopynamodb._schema import IndexSchema, GlobalSecondaryIndexSchema
+from aiopynamodb._schema import ModelSchema
+from aiopynamodb.constants import (
     INCLUDE, ALL, KEYS_ONLY, ATTR_NAME, ATTR_TYPE, KEY_TYPE,
     PROJECTION_TYPE, NON_KEY_ATTRIBUTES,
     READ_CAPACITY_UNITS, WRITE_CAPACITY_UNITS,
 )
-from pynamodb.attributes import Attribute
-from pynamodb.expressions.condition import Condition
-from pynamodb.pagination import ResultIterator
-from pynamodb.types import HASH, RANGE
+from aiopynamodb.attributes import Attribute
+from aiopynamodb.expressions.condition import Condition
+from aiopynamodb.pagination import ResultIterator
+from aiopynamodb.types import HASH, RANGE
 if TYPE_CHECKING:
-    from pynamodb.models import Model
+    from aiopynamodb.models import Model
 
 _KeyType = Any
 _M = TypeVar('_M', bound='Model')
@@ -48,7 +48,7 @@ class Index(Generic[_M]):
         if not hasattr(self.Meta, "index_name"):
             self.Meta.index_name = name
 
-    def count(
+    async def count(
         self,
         hash_key: _KeyType,
         range_key_condition: Optional[Condition] = None,
@@ -60,7 +60,7 @@ class Index(Generic[_M]):
         """
         Count on an index
         """
-        return self._model.count(
+        return await self._model.count(
             hash_key,
             range_key_condition=range_key_condition,
             filter_condition=filter_condition,

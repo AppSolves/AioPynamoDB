@@ -1,5 +1,5 @@
-from pynamodb.attributes import ListAttribute, MapAttribute, NumberAttribute, UnicodeAttribute
-from pynamodb.models import Model
+from aiopynamodb.attributes import ListAttribute, MapAttribute, NumberAttribute, UnicodeAttribute
+from aiopynamodb.models import Model
 
 
 class Location(MapAttribute):

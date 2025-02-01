@@ -3,29 +3,31 @@ Runs tests against dynamodb
 """
 import time
 
-from pynamodb.connection import Connection
-from pynamodb.constants import PROVISIONED_THROUGHPUT, READ_CAPACITY_UNITS
-from pynamodb.expressions.condition import BeginsWith, NotExists
-from pynamodb.expressions.operand import Path, Value
-from pynamodb.exceptions import TableDoesNotExist
-from pynamodb.types import STRING, HASH, RANGE, NUMBER
+from aiopynamodb.connection import Connection
+from aiopynamodb.constants import PROVISIONED_THROUGHPUT, READ_CAPACITY_UNITS
+from aiopynamodb.expressions.condition import BeginsWith, NotExists
+from aiopynamodb.expressions.operand import Path, Value
+from aiopynamodb.exceptions import TableDoesNotExist
+from aiopynamodb.types import STRING, HASH, RANGE, NUMBER
 
 import pytest
 
 
 @pytest.mark.ddblocal
-def test_connection_integration(ddb_url):
+@pytest.mark.asyncio
+async def test_connection_integration(ddb_url):
     table_name = 'pynamodb-ci-connection'
 
     # For use with a fake dynamodb connection
     # See: http://aws.amazon.com/dynamodb/developer-resources/
     conn = Connection(host=ddb_url)
+    await conn.open()
 
     print(conn)
     print("conn.describe_table...")
     table = None
     try:
-        table = conn.describe_table(table_name)
+        table = await conn.describe_table(table_name)
     except TableDoesNotExist:
         params = {
             'read_capacity_units': 1,
@@ -96,45 +98,45 @@ def test_connection_integration(ddb_url):
             ]
         }
         print("conn.create_table...")
-        conn.create_table(table_name, **params)
+        await conn.create_table(table_name, **params)
 
     while table is None:
         time.sleep(1)
-        table = conn.describe_table(table_name)
+        table = await conn.describe_table(table_name)
 
     while table['TableStatus'] == 'CREATING':
         time.sleep(2)
-        table = conn.describe_table(table_name)
+        table = await conn.describe_table(table_name)
     print("conn.list_tables")
-    conn.list_tables()
+    await conn.list_tables()
     print("conn.update_table...")
 
-    conn.update_table(
+    await conn.update_table(
         table_name,
         read_capacity_units=table.get(PROVISIONED_THROUGHPUT).get(READ_CAPACITY_UNITS) + 1,
         write_capacity_units=2
     )
 
-    table = conn.describe_table(table_name)
+    table = await conn.describe_table(table_name)
 
     while table['TableStatus'] != 'ACTIVE':
         time.sleep(2)
-        table = conn.describe_table(table_name)
+        table = await conn.describe_table(table_name)
 
     print("conn.put_item")
-    conn.put_item(
+    await conn.put_item(
         table_name,
         'item1-hash',
         range_key='item1-range',
         attributes={'foo': {'S': 'bar'}},
         condition=NotExists(Path('Forum')),
     )
-    conn.get_item(
+    await conn.get_item(
         table_name,
         'item1-hash',
         range_key='item1-range'
     )
-    conn.delete_item(
+    await conn.delete_item(
         table_name,
         'item1-hash',
         range_key='item1-range'
@@ -146,24 +148,24 @@ def test_connection_integration(ddb_url):
             {"Forum": "FooForum", "Thread": "thread-{}".format(i)}
         )
     print("conn.batch_write_items...")
-    conn.batch_write_item(
+    await conn.batch_write_item(
         table_name,
         put_items=items
     )
     print("conn.batch_get_items...")
-    data = conn.batch_get_item(
+    data = await conn.batch_get_item(
         table_name,
         items
     )
     print("conn.query...")
-    conn.query(
+    await conn.query(
         table_name,
         "FooForum",
         range_key_condition=(BeginsWith(Path('Thread'), Value('thread'))),
     )
     print("conn.scan...")
-    conn.scan(
+    await conn.scan(
         table_name,
     )
     print("conn.delete_table...")
-    conn.delete_table(table_name)
+    await conn.delete_table(table_name)

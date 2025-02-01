@@ -65,8 +65,8 @@ Here is an example, using the same table structure as shown in `Amazon's DynamoD
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import (
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import (
         UnicodeAttribute, NumberAttribute, UnicodeSetAttribute, UTCDateTimeAttribute
     )
 
@@ -99,8 +99,8 @@ Here is an example that specifies both the ``host`` and the ``region`` to use:
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
 
     class Thread(Model):
@@ -143,8 +143,8 @@ Here is an example of an attribute with a default value:
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
 
     class Thread(Model):
@@ -156,8 +156,8 @@ Here is an example of an attribute with a default *callable* value:
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
     def my_default_value():
         return 'My default value'
@@ -171,8 +171,8 @@ Here is an example of an attribute that can be empty:
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
     class Thread(Model):
         class Meta:
@@ -191,8 +191,8 @@ Here is an example of customizing an attribute name:
 
 .. code-block:: python
 
-    from pynamodb.models import Model
-    from pynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
+    from aiopynamodb.attributes import UnicodeAttribute
 
     class Thread(Model):
         class Meta:

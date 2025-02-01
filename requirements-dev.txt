@@ -2,6 +2,7 @@ pytest>=6
 pytest-env
 pytest-mock
 freezegun
+pytest-asyncio
 
 # only used in CI
 coveralls

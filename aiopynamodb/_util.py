@@ -4,16 +4,16 @@ from base64 import b64encode
 from typing import Any
 from typing import Dict
 
-from pynamodb.constants import BINARY
-from pynamodb.constants import BINARY_SET
-from pynamodb.constants import BOOLEAN
-from pynamodb.constants import LIST
-from pynamodb.constants import MAP
-from pynamodb.constants import NULL
-from pynamodb.constants import NUMBER
-from pynamodb.constants import NUMBER_SET
-from pynamodb.constants import STRING
-from pynamodb.constants import STRING_SET
+from aiopynamodb.constants import BINARY
+from aiopynamodb.constants import BINARY_SET
+from aiopynamodb.constants import BOOLEAN
+from aiopynamodb.constants import LIST
+from aiopynamodb.constants import MAP
+from aiopynamodb.constants import NULL
+from aiopynamodb.constants import NUMBER
+from aiopynamodb.constants import NUMBER_SET
+from aiopynamodb.constants import STRING
+from aiopynamodb.constants import STRING_SET
 
 
 def attr_value_to_simple_dict(attribute_value: Dict[str, Any], force: bool) -> Any:

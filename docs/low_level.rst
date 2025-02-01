@@ -14,7 +14,7 @@ Creating a connection is simple:
 
 .. code-block:: python
 
-    from pynamodb.connection import Connection
+    from aiopynamodb.connection import Connection
 
     conn = Connection()
 

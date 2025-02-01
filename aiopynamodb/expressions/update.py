@@ -5,15 +5,15 @@ from typing import Optional
 from typing import Sequence
 from typing import TYPE_CHECKING
 
-from pynamodb.constants import BINARY_SET
-from pynamodb.constants import NUMBER
-from pynamodb.constants import NUMBER_SET
-from pynamodb.constants import STRING_SET
+from aiopynamodb.constants import BINARY_SET
+from aiopynamodb.constants import NUMBER
+from aiopynamodb.constants import NUMBER_SET
+from aiopynamodb.constants import STRING_SET
 
 if TYPE_CHECKING:
-    from pynamodb.expressions.operand import _Operand
-    from pynamodb.expressions.operand import Path
-    from pynamodb.expressions.operand import Value
+    from aiopynamodb.expressions.operand import _Operand
+    from aiopynamodb.expressions.operand import Path
+    from aiopynamodb.expressions.operand import Value
 
 
 class Action:

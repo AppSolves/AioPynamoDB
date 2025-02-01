@@ -1,7 +1,7 @@
-import time
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, TypeVar
+import asyncio
+from typing import Any, Callable, Dict, Iterable, AsyncIterator, Optional, TypeVar
 
-from pynamodb.constants import (CAMEL_COUNT, ITEMS, LAST_EVALUATED_KEY, SCANNED_COUNT,
+from aiopynamodb.constants import (CAMEL_COUNT, ITEMS, LAST_EVALUATED_KEY, SCANNED_COUNT,
                                 CONSUMED_CAPACITY, TOTAL, CAPACITY_UNITS)
 
 _T = TypeVar('_T')
@@ -16,52 +16,39 @@ class RateLimiter:
             rate_limiter = RateLimiter(rate_limit)
 
         Now, every time before calling an operation, call acquire()
-            rate_limiter.acquire()
+            await rate_limiter.acquire()
 
         And after an operation, update the number of units consumed
             rate_limiter.consume(units)
-
     """
-    def __init__(self, rate_limit: float, time_module: Optional[Any] = None) -> None:
-        """
-        Initializes a RateLimiter object
 
-        :param rate_limit: The desired rate
-        :param time_module: Optional: the module responsible for calculating time. Intended to be used for testing purposes.
-        """
+    def __init__(self, rate_limit: float, time_module: Optional[Any] = None) -> None:
         if rate_limit <= 0:
             raise ValueError("rate_limit must be greater than zero")
         self._rate_limit = rate_limit
         self._consumed = 0
         self._time_of_last_acquire = 0.0
-        self._time_module: Any = time_module or time
+        self._time_module: Any = time_module or asyncio
 
     def consume(self, units: int) -> None:
         """
         Records the amount of units consumed.
-
-        :param units: Number of units consumed
-
-        :return: None
         """
         self._consumed += units
 
-    def acquire(self) -> None:
+    async def acquire(self) -> None:
         """
         Sleeps the appropriate amount of time to follow the rate limit restriction
-
-        :return: None
         """
-
-        self._time_module.sleep(max(0, self._consumed/float(self.rate_limit) - (self._time_module.time()-self._time_of_last_acquire)))
+        sleep_time = max(0, self._consumed / float(self.rate_limit) -
+                         (self._time_module.get_event_loop().time() - self._time_of_last_acquire))
+        if sleep_time > 0:
+            await self._time_module.sleep(sleep_time)
         self._consumed = 0
-        self._time_of_last_acquire = self._time_module.time()
+        self._time_of_last_acquire = self._time_module.get_event_loop().time()
 
     @property
     def rate_limit(self) -> float:
-        """
-        A limit of units per seconds
-        """
         return self._rate_limit
 
     @rate_limit.setter
@@ -71,13 +58,11 @@ class RateLimiter:
         self._rate_limit = rate_limit
 
 
-class PageIterator(Iterator[_T]):
+class PageIterator(AsyncIterator[_T]):
     """
     PageIterator handles Query and Scan result pagination.
-
-    https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html
-    https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html#Scan.Pagination
     """
+
     def __init__(
         self,
         operation: Callable,
@@ -95,19 +80,20 @@ class PageIterator(Iterator[_T]):
         if rate_limit:
             self._rate_limiter = RateLimiter(rate_limit)
 
-    def __iter__(self) -> Iterator[_T]:
+    def __aiter__(self) -> AsyncIterator[_T]:
         return self
 
-    def __next__(self) -> _T:
+    async def __anext__(self) -> _T:
         if self._is_last_page:
-            raise StopIteration()
+            raise StopAsyncIteration()
 
         self._kwargs['exclusive_start_key'] = self._last_evaluated_key
 
         if self._rate_limiter:
-            self._rate_limiter.acquire()
+            await self._rate_limiter.acquire()
             self._kwargs['return_consumed_capacity'] = TOTAL
-        page = self._operation(*self._args, **self._kwargs)
+
+        page = await self._operation(*self._args, **self._kwargs)
         self._last_evaluated_key = page.get(LAST_EVALUATED_KEY)
         self._is_last_page = self._last_evaluated_key is None
         self._total_scanned_count += page[SCANNED_COUNT]
@@ -117,9 +103,6 @@ class PageIterator(Iterator[_T]):
             self._rate_limiter.consume(consumed_capacity)
 
         return page
-
-    def next(self) -> _T:
-        return self.__next__()
 
     @property
     def key_names(self) -> Iterable[str]:
@@ -148,13 +131,11 @@ class PageIterator(Iterator[_T]):
         return self._total_scanned_count
 
 
-class ResultIterator(Iterator[_T]):
+class ResultIterator(AsyncIterator[_T]):
     """
     ResultIterator handles Query and Scan item pagination.
-
-    https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html
-    https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html#Scan.Pagination
     """
+
     def __init__(
         self,
         operation: Callable,
@@ -170,23 +151,24 @@ class ResultIterator(Iterator[_T]):
         self._total_count = 0
         self._index = 0
         self._count = 0
+        self._items = None
 
-    def _get_next_page(self) -> None:
-        page = next(self.page_iter)
+    async def _get_next_page(self) -> None:
+        page = await self.page_iter.__anext__()
         self._count = page[CAMEL_COUNT]
         self._items = page.get(ITEMS)  # not returned if 'Select' is set to 'COUNT'
         self._index = 0 if self._items else self._count
         self._total_count += self._count
 
-    def __iter__(self) -> Iterator[_T]:
+    def __aiter__(self) -> AsyncIterator[_T]:
         return self
 
-    def __next__(self) -> _T:
+    async def __anext__(self) -> _T:
         if self._limit == 0:
-            raise StopIteration
+            raise StopAsyncIteration
 
         while self._index == self._count:
-            self._get_next_page()
+            await self._get_next_page()
 
         item = self._items[self._index]
         self._index += 1
@@ -196,20 +178,14 @@ class ResultIterator(Iterator[_T]):
             item = self._map_fn(item)
         return item
 
-    def next(self) -> _T:
-        return self.__next__()
-
     @property
     def last_evaluated_key(self) -> Optional[Dict[str, Dict[str, Any]]]:
         if self._index == self._count:
             # Not started iterating yet: return `exclusive_start_key` if set, otherwise expect None; or,
             # Entire page has been consumed: last_evaluated_key is whatever DynamoDB returned
-            # It may correspond to the current item, or it may correspond to an item evaluated but not returned.
             return self.page_iter.last_evaluated_key
 
         # In the middle of a page of results: reconstruct a last_evaluated_key from the current item
-        # The operation should be resumed starting at the last item returned, not the last item evaluated.
-        # This can occur if the 'limit' is reached in the middle of a page.
         item = self._items[self._index - 1]
         return {key: item[key] for key in self.page_iter.key_names}
 

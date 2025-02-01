@@ -2,33 +2,34 @@
 Test model API
 """
 import base64
-import json
 import copy
+import json
 import re
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from unittest import TestCase
+from unittest import IsolatedAsyncioTestCase
+from unittest.mock import patch, MagicMock, AsyncMock
 
-from botocore.client import ClientError
 import pytest
+from botocore.client import ClientError
 
-from .deep_eq import deep_eq
-from pynamodb.exceptions import DoesNotExist, TableError, PutError, AttributeDeserializationError
-from pynamodb.constants import (
+from aiopynamodb.attributes import (
+    DiscriminatorAttribute, UnicodeAttribute, NumberAttribute, BinaryAttribute, UTCDateTimeAttribute,
+    UnicodeSetAttribute, NumberSetAttribute, BinarySetAttribute, MapAttribute,
+    BooleanAttribute, ListAttribute, TTLAttribute, VersionAttribute)
+from aiopynamodb.constants import (
     ITEM, STRING, ALL, KEYS_ONLY, INCLUDE, REQUEST_ITEMS, UNPROCESSED_KEYS, CAMEL_COUNT,
     RESPONSES, KEYS, ITEMS, LAST_EVALUATED_KEY, EXCLUSIVE_START_KEY, ATTRIBUTES, BINARY,
     UNPROCESSED_ITEMS, DEFAULT_ENCODING, MAP, LIST, NUMBER, SCANNED_COUNT,
 )
-from pynamodb.models import Model
-from pynamodb.indexes import (
+from aiopynamodb.exceptions import DoesNotExist, TableError, PutError, AttributeDeserializationError
+from aiopynamodb.indexes import (
     GlobalSecondaryIndex, LocalSecondaryIndex, AllProjection,
     IncludeProjection, KeysOnlyProjection, Index
 )
-from pynamodb.attributes import (
-    DiscriminatorAttribute, UnicodeAttribute, NumberAttribute, BinaryAttribute, UTCDateTimeAttribute,
-    UnicodeSetAttribute, NumberSetAttribute, BinarySetAttribute, MapAttribute,
-    BooleanAttribute, ListAttribute, TTLAttribute, VersionAttribute)
+from aiopynamodb.models import Model
 from .data import (
     MODEL_TABLE_DATA, GET_MODEL_ITEM_DATA,
     BATCH_GET_ITEMS, SIMPLE_BATCH_GET_ITEMS,
@@ -45,10 +46,9 @@ from .data import (
     EXPLICIT_RAW_MAP_MODEL_TABLE_DATA, EXPLICIT_RAW_MAP_MODEL_ITEM_DATA,
     EXPLICIT_RAW_MAP_MODEL_AS_SUB_MAP_IN_TYPED_MAP_ITEM_DATA, EXPLICIT_RAW_MAP_MODEL_AS_SUB_MAP_IN_TYPED_MAP_TABLE_DATA,
 )
+from .deep_eq import deep_eq
 
-from unittest.mock import patch, MagicMock
-
-PATCH_METHOD = 'pynamodb.connection.Connection._make_api_call'
+PATCH_METHOD = 'aiopynamodb.connection.Connection._make_api_call'
 
 
 class GamePlayerOpponentIndex(LocalSecondaryIndex):
@@ -242,7 +242,6 @@ class BatchModel(Model):
     user_name = UnicodeAttribute(hash_key=True)
 
 
-
 class HostSpecificModel(Model):
     """
     A testing model
@@ -295,14 +294,12 @@ class ComplexKeyModel(Model):
 
 
 class Location(MapAttribute):
-
     lat = NumberAttribute(attr_name='latitude')
     lng = NumberAttribute(attr_name='longitude')
     name = UnicodeAttribute()
 
 
 class Person(MapAttribute):
-
     fname = UnicodeAttribute(attr_name='firstName')
     lname = UnicodeAttribute(null=True)
     age = NumberAttribute(null=True)
@@ -315,6 +312,7 @@ class Person(MapAttribute):
 class ComplexModel(Model):
     class Meta:
         table_name = 'ComplexModel'
+
     person = Person(attr_name='weird_person')
     key = NumberAttribute(hash_key=True)
 
@@ -345,6 +343,7 @@ class CarInfoMap(MapAttribute):
 class CarModel(Model):
     class Meta:
         table_name = 'CarModel'
+
     car_id = NumberAttribute(hash_key=True, null=False)
     car_info = CarInfoMap(null=False)
 
@@ -352,13 +351,13 @@ class CarModel(Model):
 class CarModelWithNull(Model):
     class Meta:
         table_name = 'CarModelWithNull'
+
     car_id = NumberAttribute(hash_key=True, null=False)
     car_color = UnicodeAttribute(null=True)
     car_info = CarInfoMap(null=True)
 
 
 class OfficeEmployeeMap(MapAttribute):
-
     office_employee_id = NumberAttribute()
     person = Person()
     office_location = Location()
@@ -378,6 +377,7 @@ class GroceryList(Model):
 class Office(Model):
     class Meta:
         table_name = 'OfficeModel'
+
     office_id = NumberAttribute(hash_key=True)
     address = Location()
     employees = ListAttribute(of=OfficeEmployeeMap)
@@ -419,6 +419,7 @@ class TreeModel(Model):
 class ExplicitRawMapModel(Model):
     class Meta:
         table_name = 'ExplicitRawMapModel'
+
     map_id = NumberAttribute(hash_key=True, default=123)
     map_attr = MapAttribute()
 
@@ -432,6 +433,7 @@ class MapAttrSubClassWithRawMapAttr(MapAttribute):
 class ExplicitRawMapAsMemberOfSubClass(Model):
     class Meta:
         table_name = 'ExplicitRawMapAsMemberOfSubClass'
+
     map_id = NumberAttribute(hash_key=True)
     sub_attr = MapAttrSubClassWithRawMapAttr()
 
@@ -450,6 +452,7 @@ class Dog(Animal):
 class TTLModel(Model):
     class Meta:
         table_name = 'TTLModel'
+
     user_name = UnicodeAttribute(hash_key=True)
     my_ttl = TTLAttribute(default_for_new=timedelta(minutes=1))
 
@@ -463,7 +466,7 @@ class VersionedModel(Model):
     version = VersionAttribute()
 
 
-class ModelTestCase(TestCase):
+class ModelTestCase(IsolatedAsyncioTestCase):
     """
     Tests for the models API
     """
@@ -484,7 +487,8 @@ class ModelTestCase(TestCase):
                 assert list1 == list2
                 raise AssertionError("Values not equal: {} {}".format(list1, list2))
 
-    def test_create_model(self):
+    @pytest.mark.asyncio
+    async def test_create_model(self):
         """
         Model.create_table
         """
@@ -501,17 +505,17 @@ class ModelTestCase(TestCase):
             else:
                 return {}
 
-        fake_db = MagicMock()
+        fake_db = AsyncMock()
         fake_db.side_effect = fake_dynamodb
 
         with patch(PATCH_METHOD, new=fake_db):
-            with patch("pynamodb.connection.TableConnection.describe_table") as req:
+            with patch("aiopynamodb.connection.TableConnection.describe_table") as req:
                 req.return_value = None
                 with self.assertRaises(TableError):
-                    UserModel.create_table(read_capacity_units=2, write_capacity_units=2, wait=True)
+                    await UserModel.create_table(read_capacity_units=2, write_capacity_units=2, wait=True)
 
         with patch(PATCH_METHOD, new=fake_db) as req:
-            UserModel.create_table(read_capacity_units=2, write_capacity_units=2)
+            await UserModel.create_table(read_capacity_units=2, write_capacity_units=2)
 
         # Test for default region
         assert UserModel.Meta.region == None
@@ -525,24 +529,24 @@ class ModelTestCase(TestCase):
         assert UserModel._connection.connection._max_retry_attempts_exception == 3
         assert UserModel._connection.connection._max_pool_connections == 10
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = MODEL_TABLE_DATA
-            UserModel.create_table(read_capacity_units=2, write_capacity_units=2)
+            await UserModel.create_table(read_capacity_units=2, write_capacity_units=2)
             # The default region is determined by botocore
             self.assertEqual(UserModel._connection.connection.region, None)
 
         # A table with a specified region
         self.assertEqual(RegionSpecificModel.Meta.region, 'us-west-1')
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = MODEL_TABLE_DATA
-            RegionSpecificModel.create_table(read_capacity_units=2, write_capacity_units=2)
+            await RegionSpecificModel.create_table(read_capacity_units=2, write_capacity_units=2)
             self.assertEqual(RegionSpecificModel._connection.connection.region, 'us-west-1')
 
         # A table with a specified host
         self.assertEqual(HostSpecificModel.Meta.host, 'http://localhost')
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = MODEL_TABLE_DATA
-            HostSpecificModel.create_table(read_capacity_units=2, write_capacity_units=2)
+            await HostSpecificModel.create_table(read_capacity_units=2, write_capacity_units=2)
             self.assertEqual(HostSpecificModel._connection.connection.host, 'http://localhost')
 
         # A table with a specified capacity
@@ -551,9 +555,9 @@ class ModelTestCase(TestCase):
 
         # A table with billing_mode set as on_demand
         self.assertEqual(BillingModeOnDemandModel.Meta.billing_mode, 'PAY_PER_REQUEST')
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = MODEL_TABLE_DATA
-            BillingModeOnDemandModel.create_table(read_capacity_units=2, write_capacity_units=2)
+            await BillingModeOnDemandModel.create_table(read_capacity_units=2, write_capacity_units=2)
 
         UserModel._connection = None
 
@@ -570,12 +574,12 @@ class ModelTestCase(TestCase):
             else:
                 return MODEL_TABLE_DATA
 
-        mock_wait = MagicMock()
+        mock_wait = AsyncMock()
         mock_wait.side_effect = fake_wait
 
         scope_args = {'count': 0}
         with patch(PATCH_METHOD, new=mock_wait) as req:
-            UserModel.create_table(wait=True)
+            await UserModel.create_table(wait=True)
             params = {
                 'AttributeDefinitions': [
                     {
@@ -619,20 +623,16 @@ class ModelTestCase(TestCase):
             elif scope_args['count'] == 1 or scope_args['count'] == 2:
                 return {}
 
-        bad_mock_server = MagicMock()
+        bad_mock_server = AsyncMock()
         bad_mock_server.side_effect = bad_server
 
         scope_args = {'count': 0}
         with patch(PATCH_METHOD, new=bad_mock_server) as req:
-            self.assertRaises(
-                TableError,
-                UserModel.create_table,
-                read_capacity_units=2,
-                write_capacity_units=2,
-                wait=True
-            )
+            with pytest.raises(TableError):
+                await UserModel.create_table(read_capacity_units=2, write_capacity_units=2, wait=True)
 
-    def test_model_attrs(self):
+    @pytest.mark.asyncio
+    async def test_model_attrs(self):
         """
         Model()
         """
@@ -645,7 +645,8 @@ class ModelTestCase(TestCase):
 
         item = SimpleUserModel('foo')
         self.assertEqual(repr(item), "SimpleUserModel(user_name='foo')")
-        self.assertRaises(ValueError, item.save)
+        with pytest.raises(ValueError):
+            await item.save()
 
         self.assertRaises(ValueError, UserModel.from_raw_data, None)
 
@@ -692,64 +693,70 @@ class ModelTestCase(TestCase):
 
         self.assertRaises(ValueError, UserModel, user_name="bob")
 
-    def test_refresh(self):
+    @pytest.mark.asyncio
+    async def test_refresh(self):
         """
         Model.refresh
         """
         item = UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            self.assertRaises(item.DoesNotExist, item.refresh)
+            with pytest.raises(item.DoesNotExist):
+                await item.refresh()
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = GET_MODEL_ITEM_DATA
             item.picture = b'to-be-removed'
-            item.refresh()
+            await item.refresh()
             self.assertEqual(
                 item.custom_user_name,
                 GET_MODEL_ITEM_DATA.get(ITEM).get('user_name').get(STRING))
             self.assertIsNone(item.picture)
 
-    def test_complex_key(self):
+    @pytest.mark.asyncio
+    async def test_complex_key(self):
         """
         Model with complex key
         """
         item = ComplexKeyModel('test')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = COMPLEX_ITEM_DATA
-            item.refresh()
+            await item.refresh()
 
-    def test_delete_doesnt_do_validation_on_null_attributes(self):
+    @pytest.mark.asyncio
+    async def test_delete_doesnt_do_validation_on_null_attributes(self):
         """
         Model.delete
         """
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            CarModel('foo').delete()
+            await CarModel('foo').delete()
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            with CarModel.batch_write() as batch:
+            async with CarModel.batch_write() as batch:
                 car = CarModel('foo')
-                batch.delete(car)
+                await batch.delete(car)
 
     @patch('time.time')
-    def test_update(self, mock_time):
+    @pytest.mark.asyncio
+    async def test_update(self, mock_time):
         """
         Model.update
         """
         mock_time.side_effect = [1559692800]  # 2019-06-05 00:00:00 UTC
         item = SimpleUserModel(user_name='foo', is_active=True, email='foo@example.com', signature='foo', views=100)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            item.save()
+            await item.save()
 
-        self.assertRaises(TypeError, item.update, actions={'not': 'a list'})
+        with pytest.raises(TypeError):
+            await item.update(actions='not a list')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {
                 ATTRIBUTES: {
                     "user_name": {
@@ -769,7 +776,7 @@ class ModelTestCase(TestCase):
                     }
                 }
             }
-            item.update(actions=[
+            await item.update(actions=[
                 SimpleUserModel.email.set('foo@example.com'),
                 SimpleUserModel.views.remove(),
                 SimpleUserModel.is_active.set(None),
@@ -825,12 +832,12 @@ class ModelTestCase(TestCase):
             assert item.views is None
             self.assertEqual({'bob'}, item.custom_aliases)
 
-    def test_update_doesnt_do_validation_on_null_attributes(self):
+    async def test_update_doesnt_do_validation_on_null_attributes(self):
         item = CarModel(12345)
         item.car_info = CarInfoMap(make='Foo', model='Bar')
         item.car_info.location = CarLocation()  # two levels deep we have invalid Nones
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {
                 ATTRIBUTES: {
                     "car_id": {
@@ -838,17 +845,19 @@ class ModelTestCase(TestCase):
                     },
                 }
             }
-            item.update([CarModel.car_id.set(6789)])
+            res = await item.update([CarModel.car_id.set(6789)])
+            print(res)
 
-    def test_save(self):
+    @pytest.mark.asyncio
+    async def test_save(self):
         """
         Model.save
         """
         item = UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            item.save()
+            await item.save()
             args = req.call_args[0][1]
             params = {
                 'Item': {
@@ -871,9 +880,9 @@ class ModelTestCase(TestCase):
 
             deep_eq(args, params, _assert=True)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            item.save(UserModel.email.does_not_exist())
+            await item.save(UserModel.email.does_not_exist())
             args = req.call_args[0][1]
             params = {
                 'Item': {
@@ -899,9 +908,9 @@ class ModelTestCase(TestCase):
             }
             deep_eq(args, params, _assert=True)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            item.save(UserModel.email.does_not_exist() & UserModel.zip_code.exists())
+            await item.save(UserModel.email.does_not_exist() & UserModel.zip_code.exists())
             args = req.call_args[0][1]
             params = {
                 'Item': {
@@ -928,10 +937,11 @@ class ModelTestCase(TestCase):
             }
             deep_eq(args, params, _assert=True)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            item.save(
-                (UserModel.custom_user_name == 'bar') | UserModel.zip_code.does_not_exist() | UserModel.email.contains('@')
+            await item.save(
+                (UserModel.custom_user_name == 'bar') | UserModel.zip_code.does_not_exist() | UserModel.email.contains(
+                    '@')
             )
             args = req.call_args[0][1]
             params = {
@@ -968,9 +978,9 @@ class ModelTestCase(TestCase):
             }
             deep_eq(args, params, _assert=True)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            item.save(UserModel.custom_user_name == 'foo')
+            await item.save(UserModel.custom_user_name == 'foo')
             args = req.call_args[0][1]
             params = {
                 'Item': {
@@ -1001,13 +1011,14 @@ class ModelTestCase(TestCase):
             }
             deep_eq(args, params, _assert=True)
 
-    def test_filter_count(self):
+    @pytest.mark.asyncio
+    async def test_filter_count(self):
         """
         Model.count(**filters)
         """
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {'Count': 10, 'ScannedCount': 20}
-            res = UserModel.count('foo')
+            res = await UserModel.count('foo')
             self.assertEqual(res, 10)
             args = req.call_args[0][1]
             params = {
@@ -1026,7 +1037,8 @@ class ModelTestCase(TestCase):
             }
             deep_eq(args, params, _assert=True)
 
-    def test_count(self):
+    @pytest.mark.asyncio
+    async def test_count(self):
         """
         Model.count()
         """
@@ -1034,27 +1046,29 @@ class ModelTestCase(TestCase):
         def fake_dynamodb(*args, **kwargs):
             return MODEL_TABLE_DATA
 
-        fake_db = MagicMock()
+        fake_db = AsyncMock()
         fake_db.side_effect = fake_dynamodb
 
         with patch(PATCH_METHOD, new=fake_db) as req:
-            res = UserModel.count()
+            res = await UserModel.count()
             self.assertEqual(res, 42)
             args = req.call_args[0][1]
             params = {'TableName': 'UserModel'}
             self.assertEqual(args, params)
 
-    def test_count_no_hash_key(self):
+    @pytest.mark.asyncio
+    async def test_count_no_hash_key(self):
         with pytest.raises(ValueError):
-            UserModel.count(filter_condition=(UserModel.zip_code <= '94117'))
+            await UserModel.count(filter_condition=(UserModel.zip_code <= '94117'))
 
-    def test_index_count(self):
+    @pytest.mark.asyncio
+    async def test_index_count(self):
         """
         Model.index.count()
         """
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {'Count': 42, 'ScannedCount': 42}
-            res = CustomAttrNameModel.uid_index.count(
+            res = await CustomAttrNameModel.uid_index.count(
                 'foo',
                 filter_condition=CustomAttrNameModel.overidden_user_name.startswith('bar'),
                 limit=2)
@@ -1083,8 +1097,9 @@ class ModelTestCase(TestCase):
             }
             deep_eq(args, params, _assert=True)
 
-    def test_index_multipage_count(self):
-        with patch(PATCH_METHOD) as req:
+    @pytest.mark.asyncio
+    async def test_index_multipage_count(self):
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             last_evaluated_key = {
                 'user_name': {'S': u'user'},
                 'user_id': {'S': '1234'},
@@ -1093,7 +1108,7 @@ class ModelTestCase(TestCase):
                 {'Count': 1000, 'ScannedCount': 1000, 'LastEvaluatedKey': last_evaluated_key},
                 {'Count': 42, 'ScannedCount': 42}
             ]
-            res = CustomAttrNameModel.uid_index.count('foo')
+            res = await CustomAttrNameModel.uid_index.count('foo')
             self.assertEqual(res, 1042)
 
             args_one = req.call_args_list[0][0][1]
@@ -1120,10 +1135,11 @@ class ModelTestCase(TestCase):
             deep_eq(args_one, params_one, _assert=True)
             deep_eq(args_two, params_two, _assert=True)
 
-    def test_query_limit_greater_than_available_items_single_page(self):
+    @pytest.mark.asyncio
+    async def test_query_limit_greater_than_available_items_single_page(self):
         UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(5):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1131,14 +1147,16 @@ class ModelTestCase(TestCase):
                 items.append(item)
 
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
-            results = list(UserModel.query('foo', limit=25))
+            results_iter = UserModel.query('foo', limit=25)
+            results = [item async for item in results_iter]
             self.assertEqual(len(results), 5)
             self.assertEqual(req.mock_calls[0][1][1]['Limit'], 25)
 
-    def test_query_limit_identical_to_available_items_single_page(self):
+    @pytest.mark.asyncio
+    async def test_query_limit_identical_to_available_items_single_page(self):
         UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(5):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1146,14 +1164,16 @@ class ModelTestCase(TestCase):
                 items.append(item)
 
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
-            results = list(UserModel.query('foo', limit=5))
+            results_iter = UserModel.query('foo', limit=5)
+            results = [item async for item in results_iter]
             self.assertEqual(len(results), 5)
             self.assertEqual(req.mock_calls[0][1][1]['Limit'], 5)
 
-    def test_query_limit_less_than_available_items_multiple_page(self):
+    @pytest.mark.asyncio
+    async def test_query_limit_less_than_available_items_multiple_page(self):
         UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(30):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1166,7 +1186,8 @@ class ModelTestCase(TestCase):
                 {'Count': 10, 'ScannedCount': 20, 'Items': items[20:30], 'LastEvaluatedKey': {'user_id': 'z'}},
             ]
             results_iter = UserModel.query('foo', limit=25)
-            results = list(results_iter)
+            # results = list(results_iter)
+            results = [item async for item in results_iter]
             self.assertEqual(len(results), 25)
             self.assertEqual(len(req.mock_calls), 3)
             self.assertEqual(req.mock_calls[0][1][1]['Limit'], 25)
@@ -1176,10 +1197,11 @@ class ModelTestCase(TestCase):
             self.assertEqual(results_iter.total_count, 30)
             self.assertEqual(results_iter.page_iter.total_scanned_count, 60)
 
-    def test_query_limit_less_than_available_and_page_size(self):
+    @pytest.mark.asyncio
+    async def test_query_limit_less_than_available_and_page_size(self):
         UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(30):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1192,7 +1214,8 @@ class ModelTestCase(TestCase):
                 {'Count': 10, 'ScannedCount': 20, 'Items': items[20:30], 'LastEvaluatedKey': {'user_id': 'x'}},
             ]
             results_iter = UserModel.query('foo', limit=25, page_size=10)
-            results = list(results_iter)
+            # results = list(results_iter)
+            results = [item async for item in results_iter]
             self.assertEqual(len(results), 25)
             self.assertEqual(len(req.mock_calls), 3)
             self.assertEqual(req.mock_calls[0][1][1]['Limit'], 10)
@@ -1202,10 +1225,11 @@ class ModelTestCase(TestCase):
             self.assertEqual(results_iter.total_count, 30)
             self.assertEqual(results_iter.page_iter.total_scanned_count, 60)
 
-    def test_query_limit_greater_than_available_items_multiple_page(self):
+    @pytest.mark.asyncio
+    async def test_query_limit_greater_than_available_items_multiple_page(self):
         UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(30):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1218,7 +1242,8 @@ class ModelTestCase(TestCase):
                 {'Count': 10, 'ScannedCount': 20, 'Items': items[20:30]},
             ]
             results_iter = UserModel.query('foo', limit=50)
-            results = list(results_iter)
+            # results = list(results_iter)
+            results = [item async for item in results_iter]
             self.assertEqual(len(results), 30)
             self.assertEqual(len(req.mock_calls), 3)
             self.assertEqual(req.mock_calls[0][1][1]['Limit'], 50)
@@ -1228,10 +1253,11 @@ class ModelTestCase(TestCase):
             self.assertEqual(results_iter.total_count, 30)
             self.assertEqual(results_iter.page_iter.total_scanned_count, 60)
 
-    def test_query_limit_greater_than_available_items_and_page_size(self):
+    @pytest.mark.asyncio
+    async def test_query_limit_greater_than_available_items_and_page_size(self):
         UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(30):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1244,7 +1270,8 @@ class ModelTestCase(TestCase):
                 {'Count': 10, 'ScannedCount': 20, 'Items': items[20:30]},
             ]
             results_iter = UserModel.query('foo', limit=50, page_size=10)
-            results = list(results_iter)
+            # results = list(results_iter)
+            results = [item async for item in results_iter]
             self.assertEqual(len(results), 30)
             self.assertEqual(len(req.mock_calls), 3)
             self.assertEqual(req.mock_calls[0][1][1]['Limit'], 10)
@@ -1254,10 +1281,11 @@ class ModelTestCase(TestCase):
             self.assertEqual(results_iter.total_count, 30)
             self.assertEqual(results_iter.page_iter.total_scanned_count, 60)
 
-    def test_query_with_exclusive_start_key(self):
+    @pytest.mark.asyncio
+    async def test_query_with_exclusive_start_key(self):
         UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(30):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1265,12 +1293,15 @@ class ModelTestCase(TestCase):
                 items.append(item)
 
             req.side_effect = [
-                {'Count': 10, 'ScannedCount': 10, 'Items': items[10:20], 'LastEvaluatedKey': {'user_id': items[19]['user_id']}},
+                {'Count': 10, 'ScannedCount': 10, 'Items': items[10:20],
+                 'LastEvaluatedKey': {'user_id': items[19]['user_id']}},
             ]
-            results_iter = UserModel.query('foo', limit=10, page_size=10, last_evaluated_key={'user_id': items[9]['user_id']})
+            results_iter = UserModel.query('foo', limit=10, page_size=10,
+                                           last_evaluated_key={'user_id': items[9]['user_id']})
             self.assertEqual(results_iter.last_evaluated_key, {'user_id': items[9]['user_id']})
 
-            results = list(results_iter)
+            # results = list(results_iter)
+            results = [item async for item in results_iter]
             self.assertEqual(len(results), 10)
             self.assertEqual(len(req.mock_calls), 1)
             self.assertEqual(req.mock_calls[0][1][1]['Limit'], 10)
@@ -1278,7 +1309,8 @@ class ModelTestCase(TestCase):
             self.assertEqual(results_iter.total_count, 10)
             self.assertEqual(results_iter.page_iter.total_scanned_count, 10)
 
-    def test_query_with_failure(self):
+    @pytest.mark.asyncio
+    async def test_query_with_failure(self):
         items = [
             {
                 **GET_MODEL_ITEM_DATA[ITEM],
@@ -1289,29 +1321,31 @@ class ModelTestCase(TestCase):
             for idx in range(30)
         ]
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.side_effect = [
                 Exception('bleep-bloop'),
-                {'Count': 10, 'ScannedCount': 10, 'Items': items[0:10], 'LastEvaluatedKey': {'user_id': items[10]['user_id']}},
+                {'Count': 10, 'ScannedCount': 10, 'Items': items[0:10],
+                 'LastEvaluatedKey': {'user_id': items[10]['user_id']}},
             ]
             results_iter = UserModel.query('foo', limit=10, page_size=10)
 
             with pytest.raises(Exception, match='bleep-bloop'):
-                next(results_iter)
+                await anext(results_iter)
 
-            first_item = next(results_iter)
+            first_item = await anext(results_iter)
             assert first_item.user_id == 'id-0'
 
-            second_item = next(results_iter)
+            second_item = await anext(results_iter)
             assert second_item.user_id == 'id-1'
 
-    def test_query(self):
+    @pytest.mark.asyncio
+    async def test_query(self):
         """
         Model.query
         """
         UserModel('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1319,7 +1353,7 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
-            for item in UserModel.query('foo', UserModel.user_id.between('id-1', 'id-3')):
+            async for item in UserModel.query('foo', UserModel.user_id.between('id-1', 'id-3')):
                 hash_key, range_key = item._get_serialized_keys()
                 queried.append(range_key)
             self.assertListEqual(
@@ -1327,7 +1361,7 @@ class ModelTestCase(TestCase):
                 queried
             )
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1335,11 +1369,11 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
-            for item in UserModel.query('foo', UserModel.user_id < 'id-1'):
+            async for item in UserModel.query('foo', UserModel.user_id < 'id-1'):
                 queried.append(item.serialize())
             self.assertTrue(len(queried) == len(items))
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1347,11 +1381,11 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
-            for item in UserModel.query('foo', UserModel.user_id >= 'id-1'):
+            async for item in UserModel.query('foo', UserModel.user_id >= 'id-1'):
                 queried.append(item.serialize())
             self.assertTrue(len(queried) == len(items))
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1359,11 +1393,11 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
-            for item in UserModel.query('foo', UserModel.user_id <= 'id-1'):
+            async for item in UserModel.query('foo', UserModel.user_id <= 'id-1'):
                 queried.append(item.serialize())
             self.assertTrue(len(queried) == len(items))
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1371,11 +1405,11 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
-            for item in UserModel.query('foo', UserModel.user_id == 'id-1'):
+            async for item in UserModel.query('foo', UserModel.user_id == 'id-1'):
                 queried.append(item.serialize())
             self.assertTrue(len(queried) == len(items))
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1383,11 +1417,11 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
-            for item in UserModel.query('foo', UserModel.user_id.startswith('id')):
+            async for item in UserModel.query('foo', UserModel.user_id.startswith('id')):
                 queried.append(item.serialize())
             self.assertTrue(len(queried) == len(items))
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1395,7 +1429,7 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
-            for item in UserModel.query('foo'):
+            async for item in UserModel.query('foo'):
                 queried.append(item.serialize())
             self.assertTrue(len(queried) == len(items))
 
@@ -1419,14 +1453,14 @@ class ModelTestCase(TestCase):
             }
             return data
 
-        mock_query = MagicMock()
+        mock_query = AsyncMock()
         mock_query.side_effect = fake_query
 
         with patch(PATCH_METHOD, new=mock_query) as req:
-            for item in UserModel.query('foo'):
+            async for item in UserModel.query('foo'):
                 self.assertIsNotNone(item)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1434,7 +1468,7 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
-            for item in UserModel.query(
+            async for item in UserModel.query(
                     'foo',
                     UserModel.user_id.startswith('id'),
                     UserModel.email.contains('@') & UserModel.picture.exists() & UserModel.zip_code.between(2, 3)):
@@ -1472,10 +1506,12 @@ class ModelTestCase(TestCase):
             self.assertEqual(params, req.call_args[0][1])
             self.assertTrue(len(queried) == len(items))
 
-    def test_query_with_discriminator(self):
+    @pytest.mark.asyncio
+    async def test_query_with_discriminator(self):
         class ParentModel(Model):
             class Meta:
                 table_name = 'polymorphic_table'
+
             id = UnicodeAttribute(hash_key=True)
             cls = DiscriminatorAttribute()
 
@@ -1486,7 +1522,7 @@ class ModelTestCase(TestCase):
         class GrandchildModel(ChildModel, discriminator='Grandchild'):
             bar = UnicodeAttribute()
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {
                 "Table": {
                     "AttributeDefinitions": [
@@ -1513,11 +1549,11 @@ class ModelTestCase(TestCase):
                     "TableStatus": "ACTIVE"
                 }
             }
-            ChildModel('hi', foo='there').save()
+            await ChildModel('hi', foo='there').save()
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {'Count': 0, 'ScannedCount': 0, 'Items': []}
-            for item in ChildModel.query('foo'):
+            async for item in ChildModel.query('foo'):
                 pass
             params = {
                 'KeyConditionExpression': '#0 = :0',
@@ -1542,8 +1578,9 @@ class ModelTestCase(TestCase):
             }
             self.assertEqual(params, req.call_args[0][1])
 
-    def test_scan_limit_with_page_size(self):
-        with patch(PATCH_METHOD) as req:
+    @pytest.mark.asyncio
+    async def test_scan_limit_with_page_size(self):
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(30):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1556,7 +1593,7 @@ class ModelTestCase(TestCase):
                 {'Count': 10, 'ScannedCount': 20, 'Items': items[20:30], 'LastEvaluatedKey': {'user_id': 'z'}},
             ]
             results_iter = UserModel.scan(limit=25, page_size=10)
-            results = list(results_iter)
+            results = [item async for item in results_iter]
             self.assertEqual(len(results), 25)
             self.assertEqual(len(req.mock_calls), 3)
             self.assertEqual(req.mock_calls[0][1][1]['Limit'], 10)
@@ -1566,7 +1603,8 @@ class ModelTestCase(TestCase):
             self.assertEqual(results_iter.total_count, 30)
             self.assertEqual(results_iter.page_iter.total_scanned_count, 60)
 
-    def test_scan_limit(self):
+    @pytest.mark.asyncio
+    async def test_scan_limit(self):
         """
         Model.scan(limit)
         """
@@ -1580,12 +1618,12 @@ class ModelTestCase(TestCase):
             }
             return data
 
-        mock_scan = MagicMock()
+        mock_scan = AsyncMock()
         mock_scan.side_effect = fake_scan
 
         with patch(PATCH_METHOD, new=mock_scan) as req:
             count = 0
-            for item in UserModel.scan(limit=4):
+            async for item in UserModel.scan(limit=4):
                 count += 1
                 self.assertIsNotNone(item)
             self.assertEqual(len(req.mock_calls), 1)
@@ -1594,7 +1632,7 @@ class ModelTestCase(TestCase):
 
         with patch(PATCH_METHOD, new=mock_scan) as req:
             count = 0
-            for item in UserModel.scan(limit=4, consistent_read=True):
+            async for item in UserModel.scan(limit=4, consistent_read=True):
                 count += 1
                 self.assertIsNotNone(item)
             self.assertEqual(len(req.mock_calls), 2)
@@ -1602,11 +1640,12 @@ class ModelTestCase(TestCase):
             self.assertEqual(req.mock_calls[1][1][1]['ConsistentRead'], True)
             self.assertEqual(count, 4)
 
-    def test_scan(self):
+    @pytest.mark.asyncio
+    async def test_scan(self):
         """
         Model.scan
         """
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -1614,7 +1653,7 @@ class ModelTestCase(TestCase):
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             scanned_items = []
-            for item in UserModel.scan():
+            async for item in UserModel.scan():
                 hash_key, range_key = item._get_serialized_keys()
                 scanned_items.append(range_key)
             self.assertListEqual(
@@ -1642,21 +1681,21 @@ class ModelTestCase(TestCase):
             }
             return data
 
-        mock_scan = MagicMock()
+        mock_scan = AsyncMock()
         mock_scan.side_effect = fake_scan
 
         with patch(PATCH_METHOD, new=mock_scan) as req:
-            for item in UserModel.scan():
+            async for item in UserModel.scan():
                 self.assertIsNotNone(item)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
                 item['user_id'] = {STRING: 'id-{0}'.format(idx)}
                 items.append(item)
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
-            for item in UserModel.scan(
+            async for item in UserModel.scan(
                     attributes_to_get=['email']):
                 self.assertIsNotNone(item)
             params = {
@@ -1669,7 +1708,8 @@ class ModelTestCase(TestCase):
             }
             self.assertEqual(params, req.call_args[0][1])
 
-    def test_get(self):
+    @pytest.mark.asyncio
+    async def test_get(self):
         """
         Model.get
         """
@@ -1686,14 +1726,14 @@ class ModelTestCase(TestCase):
                     'user_id': {'S': 'bar'}
                 },
                 'ConsistentRead': False}:
-                    return GET_MODEL_ITEM_DATA
+                return GET_MODEL_ITEM_DATA
             return MODEL_TABLE_DATA
 
-        fake_db = MagicMock()
+        fake_db = AsyncMock()
         fake_db.side_effect = fake_dynamodb
 
         with patch(PATCH_METHOD, new=fake_db) as req:
-            item = UserModel.get(
+            item = await UserModel.get(
                 'foo',
                 'bar'
             )
@@ -1715,53 +1755,57 @@ class ModelTestCase(TestCase):
             item.zip_code = 88030
             self.assertEqual(item.zip_code, 88030)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            self.assertRaises(UserModel.DoesNotExist, UserModel.get, 'foo', 'bar')
+            with pytest.raises(UserModel.DoesNotExist):
+                await UserModel.get('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
             try:
-                UserModel.get('foo')
+                await UserModel.get('foo')
             except SimpleUserModel.DoesNotExist:
                 self.fail('DoesNotExist exceptions must be distinct per-model')
             except UserModel.DoesNotExist:
                 pass
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
             try:
-                UserModel.get('foo')
+                await UserModel.get('foo')
             except DoesNotExist:
                 pass
             except UserModel.DoesNotExist:
-                self.fail('UserModel.Exception must derive from pynamodb.Exceptions.DoesNotExist')
+                self.fail('UserModel.Exception must derive from aiopynamodb.Exceptions.DoesNotExist')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {"ConsumedCapacity": {"CapacityUnits": 0.5, "TableName": "UserModel"}}
-            self.assertRaises(CustomAttrNameModel.DoesNotExist, CustomAttrNameModel.get, 'foo', 'bar')
+            with pytest.raises(CustomAttrNameModel.DoesNotExist):
+                await CustomAttrNameModel.get('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            self.assertRaises(CustomAttrNameModel.DoesNotExist, CustomAttrNameModel.get, 'foo', 'bar')
+            with pytest.raises(CustomAttrNameModel.DoesNotExist):
+                await CustomAttrNameModel.get('foo', 'bar')
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = CUSTOM_ATTR_NAME_ITEM_DATA
-            item = CustomAttrNameModel.get('foo', 'bar')
+            item = await CustomAttrNameModel.get('foo', 'bar')
             self.assertEqual(item.overidden_attr, CUSTOM_ATTR_NAME_ITEM_DATA['Item']['foo_attr']['S'])
             self.assertEqual(item.overidden_user_name, CUSTOM_ATTR_NAME_ITEM_DATA['Item']['user_name']['S'])
             self.assertEqual(item.overidden_user_id, CUSTOM_ATTR_NAME_ITEM_DATA['Item']['user_id']['S'])
 
-    def test_batch_get(self):
+    @pytest.mark.asyncio
+    async def test_batch_get(self):
         """
         Model.batch_get
         """
         self.maxDiff = None
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = SIMPLE_BATCH_GET_ITEMS
             item_keys = ['hash-{}'.format(x) for x in range(10)]
-            for item in SimpleUserModel.batch_get(item_keys):
+            async for item in SimpleUserModel.batch_get(item_keys):
                 self.assertIsNotNone(item)
             req.call_args[0][1]['RequestItems']['SimpleModel']['Keys'].sort(key=json.dumps)
             params = {
@@ -1785,10 +1829,10 @@ class ModelTestCase(TestCase):
             }
             self.assertEqual(params, req.call_args[0][1])
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = SIMPLE_BATCH_GET_ITEMS
             item_keys = ['hash-{}'.format(x) for x in range(10)]
-            for item in SimpleUserModel.batch_get(item_keys, attributes_to_get=['numbers']):
+            async for item in SimpleUserModel.batch_get(item_keys, attributes_to_get=['numbers']):
                 self.assertIsNotNone(item)
             req.call_args[0][1]['RequestItems']['SimpleModel']['Keys'].sort(key=json.dumps)
             params = {
@@ -1816,10 +1860,10 @@ class ModelTestCase(TestCase):
             }
             self.assertEqual(params, req.call_args[0][1])
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = SIMPLE_BATCH_GET_ITEMS
             item_keys = ['hash-{}'.format(x) for x in range(10)]
-            for item in SimpleUserModel.batch_get(item_keys, consistent_read=True):
+            async for item in SimpleUserModel.batch_get(item_keys, consistent_read=True):
                 self.assertIsNotNone(item)
             req.call_args[0][1]['RequestItems']['SimpleModel']['Keys'].sort(key=json.dumps)
             params = {
@@ -1844,11 +1888,11 @@ class ModelTestCase(TestCase):
             }
             self.assertEqual(params, req.call_args[0][1])
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             item_keys = [('hash-{}'.format(x), '{}'.format(x)) for x in range(10)]
             item_keys_copy = list(item_keys)
             req.return_value = BATCH_GET_ITEMS
-            for item in UserModel.batch_get(item_keys):
+            async for item in UserModel.batch_get(item_keys):
                 self.assertIsNotNone(item)
             self.assertEqual(item_keys, item_keys_copy)
             params = {
@@ -1896,16 +1940,17 @@ class ModelTestCase(TestCase):
                 return response
             return {}
 
-        batch_get_mock = MagicMock()
+        batch_get_mock = AsyncMock()
         batch_get_mock.side_effect = fake_batch_get
 
         with patch(PATCH_METHOD, new=batch_get_mock) as req:
             item_keys = [('hash-{}'.format(x), '{}'.format(x)) for x in range(200)]
-            for item in UserModel.batch_get(item_keys):
+            async for item in UserModel.batch_get(item_keys):
                 self.assertIsNotNone(item)
 
-    def test_batch_get__range_key(self):
-        with patch(PATCH_METHOD) as req:
+    @pytest.mark.asyncio
+    async def test_batch_get__range_key(self):
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {
                 'UnprocessedKeys': {},
                 'Responses': {
@@ -1913,7 +1958,9 @@ class ModelTestCase(TestCase):
                 }
             }
             items = [(f'hash-{x}', f'range-{x}') for x in range(10)]
-            _ = list(UserModel.batch_get(items))
+            # _ = list(UserModel.batch_get(items))
+            async for _ in UserModel.batch_get(items):
+                pass
 
             actual_keys = req.call_args[0][1]['RequestItems']['UserModel']['Keys']
             actual_keys.sort(key=json.dumps)
@@ -1922,8 +1969,9 @@ class ModelTestCase(TestCase):
                 for x in range(10)
             ]
 
-    def test_batch_get__range_key__invalid__string(self):
-        with patch(PATCH_METHOD) as req:
+    @pytest.mark.asyncio
+    async def test_batch_get__range_key__invalid__string(self):
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {
                 'UnprocessedKeys': {},
                 'Responses': {
@@ -1931,15 +1979,18 @@ class ModelTestCase(TestCase):
                 }
             }
             with pytest.raises(
-                ValueError,
-                match=re.escape(
-                    "Invalid key value 'ab': expected non-str iterable with exactly 2 elements (hash key, range key)"
-                )
+                    ValueError,
+                    match=re.escape(
+                        "Invalid key value 'ab': expected non-str iterable with exactly 2 elements (hash key, range key)"
+                    )
             ):
-                _ = list(UserModel.batch_get(['ab']))
+                async for _ in UserModel.batch_get([('ab')]):
+                    pass
+                # _ = list(UserModel.batch_get(['ab']))
 
-    def test_batch_get__range_key__invalid__3_elements(self):
-        with patch(PATCH_METHOD) as req:
+    @pytest.mark.asyncio
+    async def test_batch_get__range_key__invalid__3_elements(self):
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {
                 'UnprocessedKeys': {},
                 'Responses': {
@@ -1947,57 +1998,64 @@ class ModelTestCase(TestCase):
                 }
             }
             with pytest.raises(
-                ValueError,
-                match=re.escape(
-                    "Invalid key value ('a', 'b', 'c'): expected iterable with exactly 2 elements (hash key, range key)"
-                )
+                    ValueError,
+                    match=re.escape(
+                        "Invalid key value ('a', 'b', 'c'): expected iterable with exactly 2 elements (hash key, range key)"
+                    )
             ):
-                _ = list(UserModel.batch_get([('a', 'b', 'c')]))
+                async for _ in UserModel.batch_get([('a', 'b', 'c')]):
+                    pass
+                # _ = list(UserModel.batch_get([('a', 'b', 'c')]))
 
-    def test_batch_write(self):
+    @pytest.mark.asyncio
+    async def test_batch_write(self):
         """
         Model.batch_write
         """
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
 
-            with UserModel.batch_write(auto_commit=False) as batch:
+            async with UserModel.batch_write(auto_commit=False) as batch:
                 pass
 
-            with UserModel.batch_write() as batch:
-                self.assertIsNone(batch.commit())
+            async with UserModel.batch_write() as batch:
+                self.assertIsNone(await batch.commit())
 
             with self.assertRaises(ValueError):
-                with UserModel.batch_write(auto_commit=False) as batch:
+                async with UserModel.batch_write(auto_commit=False) as batch:
                     items = [UserModel('hash-{}'.format(x), '{}'.format(x)) for x in range(26)]
                     for item in items:
-                        batch.delete(item)
+                        await batch.delete(item)
                     self.assertRaises(ValueError, batch.save, UserModel('asdf', '1234'))
 
-            with UserModel.batch_write(auto_commit=False) as batch:
+            async with UserModel.batch_write(auto_commit=False) as batch:
                 items = [UserModel('hash-{}'.format(x), '{}'.format(x)) for x in range(25)]
                 for item in items:
-                    batch.delete(item)
-                self.assertRaises(ValueError, batch.save, UserModel('asdf', '1234'))
+                    await batch.delete(item)
+                with pytest.raises(ValueError):
+                    user_model = UserModel('asdf', '1234')
+                    await batch.save(user_model)
 
-            with UserModel.batch_write(auto_commit=False) as batch:
+            async with UserModel.batch_write(auto_commit=False) as batch:
                 items = [UserModel('hash-{}'.format(x), '{}'.format(x)) for x in range(25)]
                 for item in items:
-                    batch.save(item)
-                self.assertRaises(ValueError, batch.save, UserModel('asdf', '1234'))
+                    await batch.save(item)
+                with pytest.raises(ValueError):
+                    user_model = UserModel('asdf', '1234')
+                    await batch.save(user_model)
 
-            with UserModel.batch_write() as batch:
+            async with UserModel.batch_write() as batch:
                 items = [UserModel('hash-{}'.format(x), '{}'.format(x)) for x in range(30)]
                 for item in items:
-                    batch.delete(item)
+                    await batch.delete(item)
 
-            with UserModel.batch_write() as batch:
+            async with UserModel.batch_write() as batch:
                 items = [UserModel('hash-{}'.format(x), '{}'.format(x)) for x in range(30)]
                 for item in items:
-                    batch.save(item)
+                    await batch.save(item)
 
-
-    def test_batch_write_with_unprocessed(self):
+    @pytest.mark.asyncio
+    async def test_batch_write_with_unprocessed(self):
         picture_blob = b'FFD8FFD8'
 
         items = []
@@ -2020,7 +2078,7 @@ class ModelTestCase(TestCase):
                 }
             })
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.side_effect = [
                 {
                     UNPROCESSED_ITEMS: {
@@ -2030,13 +2088,14 @@ class ModelTestCase(TestCase):
                 {},
             ]
 
-            with UserModel.batch_write() as batch:
+            async with UserModel.batch_write() as batch:
                 for item in items:
-                    batch.save(item)
+                    await batch.save(item)
 
             self.assertEqual(len(req.mock_calls), 2)
 
-    def test_batch_write_raises_put_error(self):
+    @pytest.mark.asyncio
+    async def test_batch_write_raises_put_error(self):
         items = []
         for idx in range(10):
             items.append(BatchModel(
@@ -2053,25 +2112,26 @@ class ModelTestCase(TestCase):
                 }
             })
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {
                 UNPROCESSED_ITEMS: {
                     BatchModel.Meta.table_name: unprocessed_items[2:],
                 }
             }
             with self.assertRaises(PutError):
-                with BatchModel.batch_write() as batch:
+                async with BatchModel.batch_write() as batch:
                     for item in items:
-                        batch.save(item)
+                        await batch.save(item)
             self.assertEqual(len(batch.failed_operations), 3)
 
-    def test_index_queries(self):
+    @pytest.mark.asyncio
+    async def test_index_queries(self):
         """
         Model.Index.Query
         """
         self.assertEqual(IndexedModel.include_index.Meta.index_name, "non_key_idx")
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -2081,7 +2141,8 @@ class ModelTestCase(TestCase):
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
 
-            for item in IndexedModel.email_index.query('foo', filter_condition=IndexedModel.user_name.startswith('bar'), limit=2):
+            async for item in IndexedModel.email_index.query('foo', filter_condition=IndexedModel.user_name.startswith('bar'),
+                                                       limit=2):
                 queried.append(item.serialize())
 
             params = {
@@ -2106,7 +2167,7 @@ class ModelTestCase(TestCase):
             }
             self.assertEqual(req.call_args[0][1], params)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -2116,9 +2177,10 @@ class ModelTestCase(TestCase):
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
 
-            for item in LocalIndexedModel.email_index.query(
+            async for item in LocalIndexedModel.email_index.query(
                     'foo',
-                    filter_condition=LocalIndexedModel.user_name.startswith('bar') & LocalIndexedModel.aliases.contains('baz'),
+                    filter_condition=LocalIndexedModel.user_name.startswith('bar') & LocalIndexedModel.aliases.contains(
+                        'baz'),
                     limit=1):
                 queried.append(item.serialize())
 
@@ -2148,7 +2210,7 @@ class ModelTestCase(TestCase):
             }
             self.assertEqual(req.call_args[0][1], params)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             items = []
             for idx in range(10):
                 item = copy.copy(GET_MODEL_ITEM_DATA.get(ITEM))
@@ -2157,7 +2219,7 @@ class ModelTestCase(TestCase):
             req.return_value = {'Count': len(items), 'ScannedCount': len(items), 'Items': items}
             queried = []
 
-            for item in CustomAttrNameModel.uid_index.query(
+            async for item in CustomAttrNameModel.uid_index.query(
                     'foo',
                     filter_condition=CustomAttrNameModel.overidden_user_name.startswith('bar'),
                     limit=2):
@@ -2185,7 +2247,8 @@ class ModelTestCase(TestCase):
             }
             self.assertEqual(req.call_args[0][1], params)
 
-    def test_multiple_indices_share_non_key_attribute(self):
+    @pytest.mark.asyncio
+    async def test_multiple_indices_share_non_key_attribute(self):
         """
         Models.Model
         """
@@ -2198,11 +2261,11 @@ class ModelTestCase(TestCase):
                                   "DescribeTable")
             return {}
 
-        fake_db = MagicMock()
+        fake_db = AsyncMock()
         fake_db.side_effect = fake_dynamodb
 
         with patch(PATCH_METHOD, new=fake_db) as req:
-            IndexedModel.create_table(read_capacity_units=2, write_capacity_units=2)
+            await IndexedModel.create_table(read_capacity_units=2, write_capacity_units=2)
             params = {
                 'AttributeDefinitions': [
                     {'AttributeName': 'email', 'AttributeType': 'S'},
@@ -2216,7 +2279,7 @@ class ModelTestCase(TestCase):
         scope_args['count'] = 0
 
         with patch(PATCH_METHOD, new=fake_db) as req:
-            GameModel.create_table()
+            await GameModel.create_table()
             params = {
                 'KeySchema': [
                     {'KeyType': 'HASH', 'AttributeName': 'player_id'},
@@ -2255,7 +2318,8 @@ class ModelTestCase(TestCase):
             for key in ['KeySchema', 'AttributeDefinitions', 'LocalSecondaryIndexes', 'GlobalSecondaryIndexes']:
                 self.assert_dict_lists_equal(args[key], params[key])
 
-    def test_global_index(self):
+    @pytest.mark.asyncio
+    async def test_global_index(self):
         """
         Models.GlobalSecondaryIndex
         """
@@ -2272,11 +2336,11 @@ class ModelTestCase(TestCase):
             else:
                 return {}
 
-        fake_db = MagicMock()
+        fake_db = AsyncMock()
         fake_db.side_effect = fake_dynamodb
 
         with patch(PATCH_METHOD, new=fake_db) as req:
-            IndexedModel.create_table(read_capacity_units=2, write_capacity_units=2)
+            await IndexedModel.create_table(read_capacity_units=2, write_capacity_units=2)
             args = req.call_args[0][1]
             self.assert_dict_lists_equal(
                 args['AttributeDefinitions'],
@@ -2301,7 +2365,8 @@ class ModelTestCase(TestCase):
                 }
             )
 
-    def test_local_index(self):
+    @pytest.mark.asyncio
+    async def test_local_index(self):
         """
         Models.LocalSecondaryIndex
         """
@@ -2337,11 +2402,11 @@ class ModelTestCase(TestCase):
             else:
                 return {}
 
-        fake_db = MagicMock()
+        fake_db = AsyncMock()
         fake_db.side_effect = fake_dynamodb
 
         with patch(PATCH_METHOD, new=fake_db) as req:
-            LocalIndexedModel.create_table(read_capacity_units=2, write_capacity_units=2)
+            await LocalIndexedModel.create_table(read_capacity_units=2, write_capacity_units=2)
             schema = LocalIndexedModel.email_index._get_schema()
             args = req.call_args[0][1]
             self.assert_dict_lists_equal(
@@ -2388,23 +2453,28 @@ class ModelTestCase(TestCase):
 
             BadIndex()
 
-    def test_old_style_model_exception(self):
+    @pytest.mark.asyncio
+    async def test_old_style_model_exception(self):
         """
         Display warning for pre v1.0 Models
         """
         with self.assertRaises(AttributeError):
-            OldStyleModel.exists()
+            await OldStyleModel.exists()
 
-    def test_no_table_name_exception(self):
+    @pytest.mark.asyncio
+    async def test_no_table_name_exception(self):
         """
         Display warning for Models without table names
         """
+
         class MissingTableNameModel(Model):
             class Meta:
                 pass
+
             user_name = UnicodeAttribute(hash_key=True)
+
         with self.assertRaises(AttributeError):
-            MissingTableNameModel.exists()
+            await MissingTableNameModel.exists()
 
     def _get_office_employee(self):
         justin = Person(
@@ -2495,28 +2565,33 @@ class ModelTestCase(TestCase):
             employees=[emp1, emp2, emp3, emp4]
         )
 
-    def test_model_with_maps(self):
+    @pytest.mark.asyncio
+    async def test_model_with_maps(self):
         office_employee = self._get_office_employee()
-        with patch(PATCH_METHOD):
-            office_employee.save()
+        with patch(PATCH_METHOD, new_callable=AsyncMock):
+            await office_employee.save()
 
-    def test_model_with_list(self):
+    @pytest.mark.asyncio
+    async def test_model_with_list(self):
         grocery_list = self._get_grocery_list()
-        with patch(PATCH_METHOD):
-            grocery_list.save()
+        with patch(PATCH_METHOD, new_callable=AsyncMock):
+            await grocery_list.save()
 
-    def test_model_with_list_of_map(self):
+    @pytest.mark.asyncio
+    async def test_model_with_list_of_map(self):
         item = self._get_office()
-        with patch(PATCH_METHOD):
-            item.save()
+        with patch(PATCH_METHOD, new_callable=AsyncMock):
+            await item.save()
 
-    def test_model_with_nulls_validates(self):
+    @pytest.mark.asyncio
+    async def test_model_with_nulls_validates(self):
         car_info = CarInfoMap(make='Dodge')
         item = CarModel(car_id=123, car_info=car_info)
-        with patch(PATCH_METHOD):
-            item.save()
+        with patch(PATCH_METHOD, new_callable=AsyncMock):
+            await item.save()
 
-    def test_model_with_invalid_data_does_not_validate__list_attr(self):
+    @pytest.mark.asyncio
+    async def test_model_with_invalid_data_does_not_validate__list_attr(self):
         office = Office(office_id=3, address=Location(lat=37.77461, lng=-122.3957216, name='Lyft HQ'))
         employee = OfficeEmployeeMap(
             office_employee_id=123,
@@ -2525,9 +2600,9 @@ class ModelTestCase(TestCase):
         )
         office.employees = [employee]
         employee.fname = None
-        with patch(PATCH_METHOD):
+        with patch(PATCH_METHOD, new_callable=AsyncMock):
             with self.assertRaises(ValueError) as cm:
-                office.save()
+                await office.save()
             assert str(cm.exception) == "Attribute 'employees.[0].person.fname' cannot be None"
 
     def test_model_works_like_model(self):
@@ -2556,37 +2631,40 @@ class ModelTestCase(TestCase):
         self.assertEqual(office.employees[2].person.fname, 'Garrett')
         self.assertEqual(office.employees[0].person.lname, 'Phillips')
 
-    def test_invalid_map_model_raises(self):
+    @pytest.mark.asyncio
+    async def test_invalid_map_model_raises(self):
         fake_db = self.database_mocker(CarModel, CAR_MODEL_TABLE_DATA,
                                        FULL_CAR_MODEL_ITEM_DATA, 'car_id', 'N',
-                                 '123')
+                                       '123')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             with self.assertRaises(ValueError) as cm:
-                CarModel(car_id=2).save()
+                await CarModel(car_id=2).save()
             assert str(cm.exception) == "Attribute 'car_info' cannot be None"
 
-    def test_model_with_maps_retrieve_from_db(self):
+    @pytest.mark.asyncio
+    async def test_model_with_maps_retrieve_from_db(self):
         fake_db = self.database_mocker(OfficeEmployee, OFFICE_EMPLOYEE_MODEL_TABLE_DATA,
                                        GET_OFFICE_EMPLOYEE_ITEM_DATA, 'office_employee_id', 'N',
-                                 '123')
+                                       '123')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = GET_OFFICE_EMPLOYEE_ITEM_DATA
-            item = OfficeEmployee.get(123)
+            item = await OfficeEmployee.get(123)
             self.assertEqual(
                 item.person.fname,
                 GET_OFFICE_EMPLOYEE_ITEM_DATA.get(ITEM).get('person').get(
                     MAP).get('firstName').get(STRING))
 
-    def test_model_with_maps_with_nulls_retrieve_from_db(self):
+    @pytest.mark.asyncio
+    async def test_model_with_maps_with_nulls_retrieve_from_db(self):
         fake_db = self.database_mocker(OfficeEmployee, OFFICE_EMPLOYEE_MODEL_TABLE_DATA,
                                        GET_OFFICE_EMPLOYEE_ITEM_DATA_WITH_NULL, 'office_employee_id', 'N',
-                                 '123')
+                                       '123')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = GET_OFFICE_EMPLOYEE_ITEM_DATA_WITH_NULL
-            item = OfficeEmployee.get(123)
+            item = await OfficeEmployee.get(123)
             self.assertEqual(
                 item.person.fname,
                 GET_OFFICE_EMPLOYEE_ITEM_DATA_WITH_NULL.get(ITEM).get('person').get(
@@ -2594,7 +2672,8 @@ class ModelTestCase(TestCase):
             self.assertIsNone(item.person.age)
             self.assertIsNone(item.person.is_male)
 
-    def test_model_with_maps_with_snake_case_attributes(self):
+    @pytest.mark.asyncio
+    async def test_model_with_maps_with_snake_case_attributes(self):
         fake_db = self.database_mocker(
             OfficeEmployee,
             OFFICE_EMPLOYEE_MODEL_TABLE_DATA,
@@ -2606,28 +2685,29 @@ class ModelTestCase(TestCase):
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = GET_OFFICE_EMPLOYEE_ITEM_DATA
-            item = OfficeEmployee.get(123)
+            item = await OfficeEmployee.get(123)
             self.assertEqual(
                 item.person.fname,
                 GET_OFFICE_EMPLOYEE_ITEM_DATA
-                    .get(ITEM)
-                    .get('person')
-                    .get(MAP)
-                    .get('firstName')
-                    .get(STRING)
+                .get(ITEM)
+                .get('person')
+                .get(MAP)
+                .get('firstName')
+                .get(STRING)
             )
         assert item.person.is_male
         with pytest.raises(AttributeError):
             _ = item.person.is_dude
 
-    def test_model_with_list_retrieve_from_db(self):
+    @pytest.mark.asyncio
+    async def test_model_with_list_retrieve_from_db(self):
         fake_db = self.database_mocker(GroceryList, GROCERY_LIST_MODEL_TABLE_DATA,
                                        GET_GROCERY_LIST_ITEM_DATA, 'store_name', 'S',
-                                 'Haight Street Market')
+                                       'Haight Street Market')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = GET_GROCERY_LIST_ITEM_DATA
-            item = GroceryList.get('Haight Street Market')
+            item = await GroceryList.get('Haight Street Market')
             self.assertEqual(item.store_name, GET_GROCERY_LIST_ITEM_DATA.get(ITEM).get('store_name').get(STRING))
             self.assertEqual(
                 item.groceries[2],
@@ -2635,33 +2715,35 @@ class ModelTestCase(TestCase):
                     LIST)[2].get(STRING))
             self.assertEqual(item.store_name, 'Haight Street Market')
 
-    def test_model_with_list_of_map_retrieve_from_db(self):
+    @pytest.mark.asyncio
+    async def test_model_with_list_of_map_retrieve_from_db(self):
         fake_db = self.database_mocker(Office, OFFICE_MODEL_TABLE_DATA,
                                        GET_OFFICE_ITEM_DATA, 'office_id', 'N',
-                                 '6161')
+                                       '6161')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = GET_OFFICE_ITEM_DATA
-            item = Office.get(6161)
+            item = await Office.get(6161)
             self.assertEqual(item.office_id,
-                              int(GET_OFFICE_ITEM_DATA.get(ITEM).get('office_id').get(NUMBER)))
+                             int(GET_OFFICE_ITEM_DATA.get(ITEM).get('office_id').get(NUMBER)))
             self.assertEqual(item.office_id, 6161)
             self.assertEqual(
                 item.employees[2].person.fname,
                 GET_OFFICE_ITEM_DATA.get(ITEM).get('employees').get(
                     LIST)[2].get(MAP).get('person').get(MAP).get('firstName').get(STRING))
 
-    def test_complex_model_retrieve_from_db(self):
+    @pytest.mark.asyncio
+    async def test_complex_model_retrieve_from_db(self):
         fake_db = self.database_mocker(ComplexModel, COMPLEX_MODEL_TABLE_DATA,
                                        COMPLEX_MODEL_ITEM_DATA, 'key', 'N',
-                                 '123')
+                                       '123')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = COMPLEX_MODEL_ITEM_DATA
-            item = ComplexModel.get(123)
+            item = await ComplexModel.get(123)
             self.assertEqual(item.key,
-                              int(COMPLEX_MODEL_ITEM_DATA.get(ITEM).get(
-                                  'key').get(NUMBER)))
+                             int(COMPLEX_MODEL_ITEM_DATA.get(ITEM).get(
+                                 'key').get(NUMBER)))
             self.assertEqual(item.key, 123)
             self.assertEqual(
                 item.person.fname,
@@ -2687,70 +2769,76 @@ class ModelTestCase(TestCase):
                 'ConsistentRead': False}:
                 return item_data
             return table_data
-        fake_db = MagicMock()
+
+        fake_db = AsyncMock()
         fake_db.side_effect = fake_dynamodb
         return fake_db
 
-    def test_car_model_retrieve_from_db(self):
+    @pytest.mark.asyncio
+    async def test_car_model_retrieve_from_db(self):
         fake_db = self.database_mocker(CarModel, CAR_MODEL_TABLE_DATA,
                                        FULL_CAR_MODEL_ITEM_DATA, 'car_id', 'N', '123')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = FULL_CAR_MODEL_ITEM_DATA
-            item = CarModel.get(123)
+            item = await CarModel.get(123)
             self.assertEqual(item.car_id,
-                              int(FULL_CAR_MODEL_ITEM_DATA.get(ITEM).get(
-                                  'car_id').get(NUMBER)))
+                             int(FULL_CAR_MODEL_ITEM_DATA.get(ITEM).get(
+                                 'car_id').get(NUMBER)))
             self.assertEqual(item.car_info.make, 'Volkswagen')
             self.assertEqual(item.car_info.model, 'Beetle')
 
-    def test_car_model_with_null_retrieve_from_db(self):
+    @pytest.mark.asyncio
+    async def test_car_model_with_null_retrieve_from_db(self):
         fake_db = self.database_mocker(CarModel, CAR_MODEL_TABLE_DATA,
                                        CAR_MODEL_WITH_NULL_ITEM_DATA, 'car_id', 'N',
-                                 '123')
+                                       '123')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = CAR_MODEL_WITH_NULL_ITEM_DATA
-            item = CarModel.get(123)
+            item = await CarModel.get(123)
             self.assertEqual(item.car_id,
-                              int(CAR_MODEL_WITH_NULL_ITEM_DATA.get(ITEM).get(
-                                  'car_id').get(NUMBER)))
+                             int(CAR_MODEL_WITH_NULL_ITEM_DATA.get(ITEM).get(
+                                 'car_id').get(NUMBER)))
             self.assertEqual(item.car_info.make, 'Dodge')
             self.assertIsNone(item.car_info.model)
 
-    def test_invalid_car_model_with_null_retrieve_from_db(self):
+    @pytest.mark.asyncio
+    async def test_invalid_car_model_with_null_retrieve_from_db(self):
         fake_db = self.database_mocker(CarModel, CAR_MODEL_TABLE_DATA,
                                        INVALID_CAR_MODEL_WITH_NULL_ITEM_DATA, 'car_id', 'N',
-                                 '123')
+                                       '123')
 
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = INVALID_CAR_MODEL_WITH_NULL_ITEM_DATA
-            item = CarModel.get(123)
+            item = await CarModel.get(123)
             self.assertEqual(item.car_id,
-                              int(INVALID_CAR_MODEL_WITH_NULL_ITEM_DATA.get(ITEM).get(
-                                  'car_id').get(NUMBER)))
+                             int(INVALID_CAR_MODEL_WITH_NULL_ITEM_DATA.get(ITEM).get(
+                                 'car_id').get(NUMBER)))
             self.assertIsNone(item.car_info.make)
 
-    def test_deserializing_bool_false_works(self):
+    @pytest.mark.asyncio
+    async def test_deserializing_bool_false_works(self):
         fake_db = self.database_mocker(BooleanModel,
                                        BOOLEAN_MODEL_TABLE_DATA,
                                        BOOLEAN_MODEL_FALSE_ITEM_DATA,
-                                 'user_name', 'S',
-                                 'alf')
+                                       'user_name', 'S',
+                                       'alf')
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = BOOLEAN_MODEL_FALSE_ITEM_DATA
-            item = BooleanModel.get('alf')
+            item = await BooleanModel.get('alf')
             self.assertFalse(item.is_human)
 
-    def test_deserializing_new_style_bool_true_works(self):
+    @pytest.mark.asyncio
+    async def test_deserializing_new_style_bool_true_works(self):
         fake_db = self.database_mocker(BooleanModel,
                                        BOOLEAN_MODEL_TABLE_DATA,
                                        BOOLEAN_MODEL_TRUE_ITEM_DATA,
-                                 'user_name', 'S',
-                                 'justin')
+                                       'user_name', 'S',
+                                       'justin')
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = BOOLEAN_MODEL_TRUE_ITEM_DATA
-            item = BooleanModel.get('justin')
+            item = await BooleanModel.get('justin')
             self.assertTrue(item.is_human)
 
     def test_serializing_map_with_null_check(self):
@@ -2808,16 +2896,16 @@ class ModelTestCase(TestCase):
         with pytest.raises(Exception, match=r"Attribute 'leaves.\[0\].value' cannot be None"):
             item.serialize(null_check=True)
 
-
-    def test_deserializing_map_four_layers_deep_works(self):
+    @pytest.mark.asyncio
+    async def test_deserializing_map_four_layers_deep_works(self):
         fake_db = self.database_mocker(TreeModel,
                                        TREE_MODEL_TABLE_DATA,
                                        TREE_MODEL_ITEM_DATA,
-                                 'tree_key', 'S',
-                                 '123')
+                                       'tree_key', 'S',
+                                       '123')
         with patch(PATCH_METHOD, new=fake_db) as req:
             req.return_value = TREE_MODEL_ITEM_DATA
-            item = TreeModel.get('123')
+            item = await TreeModel.get('123')
             self.assertEqual(item.left.left.left.value, 3)
 
     def test_explicit_raw_map_serialize_pass(self):
@@ -2830,14 +2918,14 @@ class ModelTestCase(TestCase):
     def test_raw_map_serialize_fun_one(self):
         map_native = {
             'foo': 'bar', 'num': 12345678909876543211234234324234, 'bool_type': True,
-            'other_b_type': False, 'floaty': 1.2, 'listy': [1,2,3],
+            'other_b_type': False, 'floaty': 1.2, 'listy': [1, 2, 3],
             'mapy': {'baz': 'bongo'}
         }
         expected = {'M': {'foo': {'S': u'bar'},
-               'listy': {'L': [{'N': '1'}, {'N': '2'}, {'N': '3'}]},
-               'num': {'N': '12345678909876543211234234324234'}, 'other_b_type': {'BOOL': False},
-               'floaty': {'N': '1.2'}, 'mapy': {'M': {'baz': {'S': u'bongo'}}},
-               'bool_type': {'BOOL': True}}}
+                          'listy': {'L': [{'N': '1'}, {'N': '2'}, {'N': '3'}]},
+                          'num': {'N': '12345678909876543211234234324234'}, 'other_b_type': {'BOOL': False},
+                          'floaty': {'N': '1.2'}, 'mapy': {'M': {'baz': {'S': u'bongo'}}},
+                          'bool_type': {'BOOL': True}}}
 
         instance = ExplicitRawMapModel(map_attr=map_native)
         serialized = instance.serialize()
@@ -2871,7 +2959,8 @@ class ModelTestCase(TestCase):
             "MapAttribute(foo='bar', num=1, bool_type=True, other_b_type=False, floaty=1.2, listy=[1, 2, 12345678909876543211234234324234], mapy={'baz': 'bongo'})"
         )
 
-    def test_raw_map_from_raw_data_works(self):
+    @pytest.mark.asyncio
+    async def test_raw_map_from_raw_data_works(self):
         map_native = {
             'foo': 'bar', 'num': 1, 'bool_type': True,
             'other_b_type': False, 'floaty': 1.2, 'listy': [1, 2, 12345678909876543211234234324234],
@@ -2883,7 +2972,7 @@ class ModelTestCase(TestCase):
                                        'map_id', 'N',
                                        '123')
         with patch(PATCH_METHOD, new=fake_db):
-            item = ExplicitRawMapModel.get(123)
+            item = await ExplicitRawMapModel.get(123)
             actual = item.map_attr
             self.assertEqual(map_native.get('listy')[2], actual['listy'][2])
             for k, v in map_native.items():
@@ -2936,14 +3025,14 @@ class ModelTestCase(TestCase):
         )
         return map_native, map_serialized, sub_attr, instance
 
-    def test_raw_map_as_sub_map(self):
+    async def test_raw_map_as_sub_map(self):
         map_native, map_serialized, sub_attr, instance = self._get_raw_map_as_sub_map_test_data()
         actual = instance.sub_attr
         self.assertEqual(sub_attr, actual)
         self.assertEqual(actual.map_field['floaty'], map_native.get('floaty'))
         self.assertEqual(actual.map_field['mapy']['baz'], map_native.get('mapy').get('baz'))
 
-    def test_raw_map_as_sub_map_deserialize(self):
+    async def test_raw_map_as_sub_map_deserialize(self):
         map_native, map_serialized, _, _ = self._get_raw_map_as_sub_map_test_data()
 
         actual = MapAttrSubClassWithRawMapAttr().deserialize({
@@ -2953,7 +3042,8 @@ class ModelTestCase(TestCase):
         for k, v in map_native.items():
             self.assertEqual(actual.map_field[k], v)
 
-    def test_raw_map_as_sub_map_from_raw_data_works(self):
+    @pytest.mark.asyncio
+    async def test_raw_map_as_sub_map_from_raw_data_works(self):
         map_native, map_serialized, sub_attr, instance = self._get_raw_map_as_sub_map_test_data()
         fake_db = self.database_mocker(ExplicitRawMapAsMemberOfSubClass,
                                        EXPLICIT_RAW_MAP_MODEL_AS_SUB_MAP_IN_TYPED_MAP_TABLE_DATA,
@@ -2961,14 +3051,15 @@ class ModelTestCase(TestCase):
                                        'map_id', 'N',
                                        '123')
         with patch(PATCH_METHOD, new=fake_db):
-            item = ExplicitRawMapAsMemberOfSubClass.get(123)
+            item = await ExplicitRawMapAsMemberOfSubClass.get(123)
             actual = item.sub_attr
             self.assertEqual(sub_attr.map_field['floaty'],
                              map_native.get('floaty'))
             self.assertEqual(actual.map_field['mapy']['baz'],
                              map_native.get('mapy').get('baz'))
 
-    def test_model_subclass_attributes_inherited_on_create(self):
+    @pytest.mark.asyncio
+    async def test_model_subclass_attributes_inherited_on_create(self):
         scope_args = {'count': 0}
 
         def fake_dynamodb(*args, **kwargs):
@@ -2978,11 +3069,11 @@ class ModelTestCase(TestCase):
                                   "DescribeTable")
             return {}
 
-        fake_db = MagicMock()
+        fake_db = AsyncMock()
         fake_db.side_effect = fake_dynamodb
 
         with patch(PATCH_METHOD, new=fake_db) as req:
-            Dog.create_table(read_capacity_units=2, write_capacity_units=2)
+            await Dog.create_table(read_capacity_units=2, write_capacity_units=2)
 
             actual = req.call_args_list[1][0][1]
 
@@ -2991,12 +3082,13 @@ class ModelTestCase(TestCase):
             self.assert_dict_lists_equal(actual['AttributeDefinitions'],
                                          DOG_TABLE_DATA['Table']['AttributeDefinitions'])
 
-    def test_model_version_attribute_save_with_initial_version_zero(self):
+    @pytest.mark.asyncio
+    async def test_model_version_attribute_save_with_initial_version_zero(self):
         item = VersionedModel('test_user_name', email='test_user@email.com', version=0)
 
-        with patch(PATCH_METHOD) as req:
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = {}
-            item.save()
+            await item.save()
             args = req.call_args[0][1]
             params = {
                 'Item': {
@@ -3020,7 +3112,7 @@ class ModelTestCase(TestCase):
             deep_eq(args, params, _assert=True)
             item.version = 1
             item.name = "test_new_username"
-            item.save()
+            await item.save()
             args = req.call_args[0][1]
 
             params = {
@@ -3045,7 +3137,7 @@ class ModelTestCase(TestCase):
             deep_eq(args, params, _assert=True)
 
 
-class ModelInitTestCase(TestCase):
+class ModelInitTestCase(IsolatedAsyncioTestCase):
 
     def test_raw_map_attribute_with_dict_init(self):
         attribute = {
@@ -3133,13 +3225,16 @@ class ModelInitTestCase(TestCase):
             class BadTTLModel(Model):
                 class Meta:
                     table_name = 'BadTTLModel'
+
                 ttl = TTLAttribute(default_for_new=timedelta(minutes=1))
                 another_ttl = TTLAttribute()
 
-    def test_get_ttl_attribute_fails(self):
-        with patch(PATCH_METHOD) as req:
+    @pytest.mark.asyncio
+    async def test_get_ttl_attribute_fails(self):
+        with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.side_effect = Exception
-            self.assertRaises(Exception, TTLModel.update_ttl, False)
+            with pytest.raises(Exception):
+                await TTLModel.update_ttl(False)
 
     def test_get_ttl_attribute(self):
         assert TTLModel._ttl_attribute().attr_name == "my_ttl"
@@ -3186,19 +3281,24 @@ class ModelInitTestCase(TestCase):
         class ParentModel(Model):
             class Meta:
                 table_name = 'foo'
+
         class ChildModel(ParentModel):
             pass
+
         self.assertEqual(ParentModel.Meta.table_name, ChildModel.Meta.table_name)
 
     def test_connection_inheritance(self):
         class Foo(Model):
             class Meta:
                 table_name = 'foo'
+
         class Bar(Foo):
             class Meta:
                 table_name = 'bar'
+
         class Baz(Foo):
             pass
+
         assert Foo._get_connection() is not Bar._get_connection()
         assert Foo._get_connection() is Baz._get_connection()
         self.assertEqual(Foo._get_connection().table_name, Foo.Meta.table_name)
@@ -3207,11 +3307,12 @@ class ModelInitTestCase(TestCase):
 
 
 @pytest.mark.parametrize('add_version_condition', [True, False])
-def test_model_version_attribute_save(add_version_condition: bool) -> None:
+@pytest.mark.asyncio
+async def test_model_version_attribute_save(add_version_condition: bool) -> None:
     item = VersionedModel('test_user_name', email='test_user@email.com')
-    with patch(PATCH_METHOD) as req:
+    with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
         req.return_value = {}
-        item.save(add_version_condition=add_version_condition)
+        await item.save(add_version_condition=add_version_condition)
         args = req.call_args[0][1]
         params = {
             'Item': {
@@ -3238,7 +3339,7 @@ def test_model_version_attribute_save(add_version_condition: bool) -> None:
         deep_eq(args, params, _assert=True)
         item.version = 1
         item.name = "test_new_username"
-        item.save(add_version_condition=add_version_condition)
+        await item.save(add_version_condition=add_version_condition)
         args = req.call_args[0][1]
 
         params = {
@@ -3267,10 +3368,11 @@ def test_model_version_attribute_save(add_version_condition: bool) -> None:
 
 
 @pytest.mark.parametrize('add_version_condition', [True, False])
-def test_version_attribute_increments_on_update(add_version_condition: bool) -> None:
+@pytest.mark.asyncio
+async def test_version_attribute_increments_on_update(add_version_condition: bool) -> None:
     item = VersionedModel('test_user_name', email='test_user@email.com')
 
-    with patch(PATCH_METHOD) as req:
+    with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
         req.return_value = {
             ATTRIBUTES: {
                 'name': {
@@ -3284,7 +3386,8 @@ def test_version_attribute_increments_on_update(add_version_condition: bool) -> 
                 },
             }
         }
-        item.update(actions=[VersionedModel.email.set('new@email.com')], add_version_condition=add_version_condition)
+        await item.update(actions=[VersionedModel.email.set('new@email.com')],
+                          add_version_condition=add_version_condition)
         args = req.call_args[0][1]
         expected = {
             'ExpressionAttributeValues': {
@@ -3319,7 +3422,7 @@ def test_version_attribute_increments_on_update(add_version_condition: bool) -> 
         assert args == expected
         assert item.version == 1
 
-    with patch(PATCH_METHOD) as req:
+    with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
         req.return_value = {
             ATTRIBUTES: {
                 'name': {
@@ -3334,7 +3437,8 @@ def test_version_attribute_increments_on_update(add_version_condition: bool) -> 
             }
         }
 
-        item.update(actions=[VersionedModel.email.set('newer@email.com')], add_version_condition=add_version_condition)
+        await item.update(actions=[VersionedModel.email.set('newer@email.com')],
+                          add_version_condition=add_version_condition)
         args = req.call_args[0][1]
         expected = {
             'Key': {
@@ -3364,12 +3468,13 @@ def test_version_attribute_increments_on_update(add_version_condition: bool) -> 
 
 
 @pytest.mark.parametrize('add_version_condition', [True, False])
-def test_delete(add_version_condition: bool) -> None:
+@pytest.mark.asyncio
+async def test_delete(add_version_condition: bool) -> None:
     item = UserModel('foo', 'bar')
 
-    with patch(PATCH_METHOD) as req:
+    with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
         req.return_value = None
-        item.delete(add_version_condition=add_version_condition)
+        await item.delete(add_version_condition=add_version_condition)
         expected = {
             'Key': {
                 'user_id': {
@@ -3385,9 +3490,9 @@ def test_delete(add_version_condition: bool) -> None:
         args = req.call_args[0][1]
         assert args == expected
 
-    with patch(PATCH_METHOD) as req:
+    with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
         req.return_value = None
-        item.delete(UserModel.user_id =='bar', add_version_condition=add_version_condition)
+        await item.delete(UserModel.user_id == 'bar', add_version_condition=add_version_condition)
         expected = {
             'Key': {
                 'user_id': {
@@ -3412,9 +3517,9 @@ def test_delete(add_version_condition: bool) -> None:
         args = req.call_args[0][1]
         assert args == expected
 
-    with patch(PATCH_METHOD) as req:
+    with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
         req.return_value = None
-        item.delete(UserModel.user_id == 'bar', add_version_condition=add_version_condition)
+        await item.delete(UserModel.user_id == 'bar', add_version_condition=add_version_condition)
         expected = {
             'Key': {
                 'user_id': {

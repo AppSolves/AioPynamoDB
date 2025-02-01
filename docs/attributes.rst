@@ -24,8 +24,8 @@ You can write your own attribute class which defines the necessary methods like 
 
 .. code-block:: python
 
-    from pynamodb.attributes import Attribute
-    from pynamodb.constants import BINARY
+    from aiopynamodb.attributes import Attribute
+    from aiopynamodb.constants import BINARY
 
     class CustomAttribute(Attribute):
         """
@@ -54,8 +54,8 @@ already defined it.
 .. code-block:: python
 
     import pickle
-    from pynamodb.attributes import BinaryAttribute, UnicodeAttribute
-    from pynamodb.models import Model
+    from aiopynamodb.attributes import BinaryAttribute, UnicodeAttribute
+    from aiopynamodb.models import Model
 
 
     class Color(object):
@@ -120,7 +120,7 @@ Creating an untyped list is done like so:
 
 .. code-block:: python
 
-    from pynamodb.attributes import ListAttribute, NumberAttribute, UnicodeAttribute
+    from aiopynamodb.attributes import ListAttribute, NumberAttribute, UnicodeAttribute
 
     class GroceryList(Model):
         class Meta:
@@ -139,7 +139,7 @@ When defining your model use the ``of=`` kwarg and pass in a class. PynamoDB wil
 
 .. code-block:: python
 
-    from pynamodb.attributes import ListAttribute, NumberAttribute
+    from aiopynamodb.attributes import ListAttribute, NumberAttribute
 
 
     class OfficeEmployeeMap(MapAttribute):
@@ -187,7 +187,7 @@ These attributes can then be used inside of Model classes just like any other at
 
 .. code-block:: python
 
-    from pynamodb.attributes import MapAttribute, UnicodeAttribute
+    from aiopynamodb.attributes import MapAttribute, UnicodeAttribute
 
     class CarInfoMap(MapAttribute):
         make = UnicodeAttribute(null=False)
@@ -199,7 +199,7 @@ These attributes can then be used inside of Model classes just like any other at
 
 .. code-block:: python
 
-    from pynamodb.attributes import DynamicMapAttribute, UnicodeAttribute
+    from aiopynamodb.attributes import DynamicMapAttribute, UnicodeAttribute
 
     class CarInfo(DynamicMapAttribute):
         make = UnicodeAttribute(null=False)

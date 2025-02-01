@@ -8,7 +8,7 @@ import warnings
 import sys
 from copy import deepcopy
 from inspect import getmembers
-from typing import Any
+from typing import Any, AsyncIterator
 from typing import Dict
 from typing import Generic
 from typing import Iterable
@@ -24,28 +24,28 @@ from typing import TypeVar
 from typing import Union
 from typing import cast
 
-from pynamodb._schema import ModelSchema
-from pynamodb.connection.base import MetaTable
+from aiopynamodb._schema import ModelSchema
+from aiopynamodb.connection.base import MetaTable
 
 if sys.version_info >= (3, 8):
     from typing import Protocol
 else:
     from typing_extensions import Protocol
 
-from pynamodb.expressions.update import Action
-from pynamodb.exceptions import DoesNotExist, TableDoesNotExist, TableError, InvalidStateError, PutError, \
+from aiopynamodb.expressions.update import Action
+from aiopynamodb.exceptions import DoesNotExist, TableDoesNotExist, TableError, InvalidStateError, PutError, \
     AttributeNullError
-from pynamodb.attributes import (
+from aiopynamodb.attributes import (
     AttributeContainer, AttributeContainerMeta, TTLAttribute, VersionAttribute
 )
-from pynamodb.connection.table import TableConnection
-from pynamodb.expressions.condition import Condition
-from pynamodb.types import HASH, RANGE
-from pynamodb.indexes import Index
-from pynamodb.pagination import ResultIterator
-from pynamodb.settings import get_settings_value
-from pynamodb import constants
-from pynamodb.constants import (
+from aiopynamodb.connection.table import TableConnection
+from aiopynamodb.expressions.condition import Condition
+from aiopynamodb.types import HASH, RANGE
+from aiopynamodb.indexes import Index
+from aiopynamodb.pagination import ResultIterator
+from aiopynamodb.settings import get_settings_value
+from aiopynamodb import constants
+from aiopynamodb.constants import (
     ATTR_NAME, ATTR_TYPE,
     KEY_TYPE, ITEM,
     ATTRIBUTES, PUT, DELETE, RESPONSES,
@@ -77,7 +77,7 @@ class BatchWrite(Generic[_T]):
         self.pending_operations: List[Dict[str, Any]] = []
         self.failed_operations: List[Any] = []
 
-    def save(self, put_item: _T) -> None:
+    async def save(self, put_item: _T) -> None:
         """
         This adds `put_item` to the list of pending operations to be performed.
 
@@ -94,10 +94,10 @@ class BatchWrite(Generic[_T]):
             if not self.auto_commit:
                 raise ValueError("DynamoDB allows a maximum of 25 batch operations")
             else:
-                self.commit()
+                await self.commit()
         self.pending_operations.append({"action": PUT, "item": put_item})
 
-    def delete(self, del_item: _T) -> None:
+    async def delete(self, del_item: _T) -> None:
         """
         This adds `del_item` to the list of pending operations to be performed.
 
@@ -114,20 +114,20 @@ class BatchWrite(Generic[_T]):
             if not self.auto_commit:
                 raise ValueError("DynamoDB allows a maximum of 25 batch operations")
             else:
-                self.commit()
+                await self.commit()
         self.pending_operations.append({"action": DELETE, "item": del_item})
 
-    def __enter__(self):
+    async def __aenter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
         """
         This ensures that all pending operations are committed when
         the context is exited
         """
-        return self.commit()
+        return await self.commit()
 
-    def commit(self) -> None:
+    async def commit(self) -> None:
         """
         Writes all of the changes that are pending
         """
@@ -142,7 +142,7 @@ class BatchWrite(Generic[_T]):
         self.pending_operations = []
         if not len(put_items) and not len(delete_items):
             return
-        data = self.model._get_connection().batch_write_item(
+        data = await self.model._get_connection().batch_write_item(
             put_items=put_items,
             delete_items=delete_items,
         )
@@ -166,7 +166,7 @@ class BatchWrite(Generic[_T]):
                 elif DELETE_REQUEST in item:
                     delete_items.append(item.get(DELETE_REQUEST).get(KEY))  # type: ignore
             log.info("Resending %d unprocessed keys for batch operation (retry %d)", len(unprocessed_items), retries)
-            data = self.model._get_connection().batch_write_item(
+            data = await self.model._get_connection().batch_write_item(
                 put_items=put_items,
                 delete_items=delete_items,
             )
@@ -252,7 +252,7 @@ class MetaModel(AttributeContainerMeta):
                     if not hasattr(attr_obj, 'aws_session_token'):
                         setattr(attr_obj, 'aws_session_token', None)
 
-            # create a custom Model.DoesNotExist derived from pynamodb.exceptions.DoesNotExist,
+            # create a custom Model.DoesNotExist derived from aiopynamodb.exceptions.DoesNotExist,
             # so that "except Model.DoesNotExist:" would not catch other models' exceptions
             if 'DoesNotExist' not in namespace:
                 exception_attrs = {
@@ -317,12 +317,12 @@ class Model(AttributeContainer, metaclass=MetaModel):
         super(Model, self).__init__(_user_instantiated=_user_instantiated, **attributes)
 
     @classmethod
-    def batch_get(
+    async def batch_get(
         cls: Type[_T],
         items: Iterable[Union[_KeyType, Iterable[_KeyType]]],
         consistent_read: Optional[bool] = None,
         attributes_to_get: Optional[Sequence[str]] = None,
-    ) -> Iterator[_T]:
+    ) -> AsyncIterator[_T]:
         """
         BatchGetItem for this model
 
@@ -336,7 +336,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         while items:
             if len(keys_to_get) == BATCH_GET_PAGE_LIMIT:
                 while keys_to_get:
-                    page, unprocessed_keys = cls._batch_get_page(
+                    page, unprocessed_keys = await cls._batch_get_page(
                         keys_to_get,
                         consistent_read=consistent_read,
                         attributes_to_get=attributes_to_get,
@@ -369,7 +369,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
                 })
 
         while keys_to_get:
-            page, unprocessed_keys = cls._batch_get_page(
+            page, unprocessed_keys = await cls._batch_get_page(
                 keys_to_get,
                 consistent_read=consistent_read,
                 attributes_to_get=attributes_to_get,
@@ -394,7 +394,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         """
         return BatchWrite(cls, auto_commit=auto_commit)
 
-    def delete(self, condition: Optional[Condition] = None, *, add_version_condition: bool = True) -> Any:
+    async def delete(self, condition: Optional[Condition] = None, *, add_version_condition: bool = True) -> Any:
         """
         Deletes this object from DynamoDB.
 
@@ -409,9 +409,9 @@ class Model(AttributeContainer, metaclass=MetaModel):
         if add_version_condition and version_condition is not None:
             condition &= version_condition
 
-        return self._get_connection().delete_item(hk_value, range_key=rk_value, condition=condition)
+        return await self._get_connection().delete_item(hk_value, range_key=rk_value, condition=condition)
 
-    def update(self, actions: List[Action], condition: Optional[Condition] = None, *, add_version_condition: bool = True) -> Any:
+    async def update(self, actions: List[Action], condition: Optional[Condition] = None, *, add_version_condition: bool = True) -> Any:
         """
         Updates an item using the UpdateItem operation.
 
@@ -433,7 +433,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         if add_version_condition and version_condition is not None:
             condition &= version_condition
 
-        data = self._get_connection().update_item(hk_value, range_key=rk_value, return_values=ALL_NEW, condition=condition, actions=actions)
+        data = await self._get_connection().update_item(hk_value, range_key=rk_value, return_values=ALL_NEW, condition=condition, actions=actions)
         item_data = data[ATTRIBUTES]
         stored_cls = self._get_discriminator_class(item_data)
         if stored_cls and stored_cls != type(self):
@@ -441,16 +441,16 @@ class Model(AttributeContainer, metaclass=MetaModel):
         self.deserialize(item_data)
         return data
 
-    def save(self, condition: Optional[Condition] = None, *, add_version_condition: bool = True) -> Dict[str, Any]:
+    async def save(self, condition: Optional[Condition] = None, *, add_version_condition: bool = True) -> Dict[str, Any]:
         """
         Save this object to dynamodb
         """
         args, kwargs = self._get_save_args(condition=condition, add_version_condition=add_version_condition)
-        data = self._get_connection().put_item(*args, **kwargs)
+        data = await self._get_connection().put_item(*args, **kwargs)
         self.update_local_version_attribute()
         return data
 
-    def refresh(self, consistent_read: bool = False) -> None:
+    async def refresh(self, consistent_read: bool = False) -> None:
         """
         Retrieves this object's data from dynamodb and syncs this local object
 
@@ -459,7 +459,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         :raises ModelInstance.DoesNotExist: if the object to be updated does not exist
         """
         hk_value, rk_value = self._get_hash_range_key_serialized_values()
-        attrs = self._get_connection().get_item(hk_value, range_key=rk_value, consistent_read=consistent_read)
+        attrs = await self._get_connection().get_item(hk_value, range_key=rk_value, consistent_read=consistent_read)
         item_data = attrs.get(ITEM, None)
         if item_data is None:
             raise self.DoesNotExist("This item does not exist in the table.")
@@ -524,7 +524,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         )
 
     @classmethod
-    def get(
+    async def get(
         cls: Type[_T],
         hash_key: _KeyType,
         range_key: Optional[_KeyType] = None,
@@ -542,7 +542,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         """
         hash_key, range_key = cls._serialize_keys(hash_key, range_key)
 
-        data = cls._get_connection().get_item(
+        data = await cls._get_connection().get_item(
             hash_key,
             range_key=range_key,
             consistent_read=consistent_read,
@@ -568,7 +568,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         return cls._instantiate(data)
 
     @classmethod
-    def count(
+    async def count(
         cls: Type[_T],
         hash_key: Optional[_KeyType] = None,
         range_key_condition: Optional[Condition] = None,
@@ -591,7 +591,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         if hash_key is None:
             if filter_condition is not None:
                 raise ValueError('A hash_key must be given to use filters')
-            return cls.describe_table().get(ITEM_COUNT)
+            return (await cls.describe_table()).get(ITEM_COUNT)
 
         if index_name:
             hash_key = cls._indexes[index_name]._hash_key_attribute().serialize(hash_key)
@@ -622,7 +622,8 @@ class Model(AttributeContainer, metaclass=MetaModel):
         )
 
         # iterate through results
-        list(result_iterator)
+        async for _ in result_iterator:
+            pass
 
         return result_iterator.total_count
 
@@ -749,32 +750,32 @@ class Model(AttributeContainer, metaclass=MetaModel):
         )
 
     @classmethod
-    def exists(cls: Type[_T]) -> bool:
+    async def exists(cls: Type[_T]) -> bool:
         """
         Returns True if this table exists, False otherwise
         """
         try:
-            cls._get_connection().describe_table()
+            await cls._get_connection().describe_table()
             return True
         except TableDoesNotExist:
             return False
 
     @classmethod
-    def delete_table(cls) -> Any:
+    async def delete_table(cls) -> Any:
         """
         Delete the table for this model
         """
-        return cls._get_connection().delete_table()
+        return await cls._get_connection().delete_table()
 
     @classmethod
-    def describe_table(cls) -> Any:
+    async def describe_table(cls) -> Any:
         """
         Returns the result of a DescribeTable operation on this model's table
         """
-        return cls._get_connection().describe_table()
+        return await cls._get_connection().describe_table()
 
     @classmethod
-    def create_table(
+    async def create_table(
         cls,
         wait: bool = False,
         read_capacity_units: Optional[int] = None,
@@ -790,7 +791,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         :param write_capacity_units: Sets the write capacity units for this table
         :param billing_mode: Sets the billing mode 'PROVISIONED' (default) or 'PAY_PER_REQUEST' for this table
         """
-        if not cls.exists():
+        if not await cls.exists():
             schema = cls._get_schema()
             operation_kwargs: Dict[str, Any] = {
                 'attribute_definitions': schema['attribute_definitions'],
@@ -817,12 +818,12 @@ class Model(AttributeContainer, metaclass=MetaModel):
                 operation_kwargs['write_capacity_units'] = write_capacity_units
             if billing_mode is not None:
                 operation_kwargs['billing_mode'] = billing_mode
-            cls._get_connection().create_table(
+            await cls._get_connection().create_table(
                 **operation_kwargs
             )
         if wait:
             while True:
-                status = cls._get_connection().describe_table()
+                status = await cls._get_connection().describe_table()
                 if status:
                     data = status.get(TABLE_STATUS)
                     if data == ACTIVE:
@@ -832,10 +833,10 @@ class Model(AttributeContainer, metaclass=MetaModel):
                 else:
                     raise TableError("No TableStatus returned for table")
 
-        cls.update_ttl(ignore_update_ttl_errors)
+        await cls.update_ttl(ignore_update_ttl_errors)
 
     @classmethod
-    def update_ttl(cls, ignore_update_ttl_errors: bool) -> None:
+    async def update_ttl(cls, ignore_update_ttl_errors: bool) -> None:
         """
         Attempt to update the TTL on the table.
         Certain implementations (eg: dynalite) do not support updating TTLs and will fail.
@@ -845,7 +846,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
             # Some dynamoDB implementations (eg: dynalite) do not support updating TTLs so
             # this will fail.  It's fine for this to fail in those cases.
             try:
-                cls._get_connection().update_time_to_live(ttl_attribute.attr_name)
+                await cls._get_connection().update_time_to_live(ttl_attribute.attr_name)
             except Exception:
                 if ignore_update_ttl_errors:
                     log.info("Unable to update the TTL for {}".format(cls.Meta.table_name))
@@ -1009,7 +1010,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         return self._serialize_keys(hash_key, range_key)
 
     @classmethod
-    def _batch_get_page(cls, keys_to_get, consistent_read, attributes_to_get):
+    async def _batch_get_page(cls, keys_to_get, consistent_read, attributes_to_get):
         """
         Returns a single page from BatchGetItem
         Also returns any unprocessed items
@@ -1019,7 +1020,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         :param attributes_to_get: A list of attributes to return
         """
         log.debug("Fetching a BatchGetItem page")
-        data = cls._get_connection().batch_get_item(
+        data = await cls._get_connection().batch_get_item(
             keys_to_get, consistent_read=consistent_read, attributes_to_get=attributes_to_get,
         )
         item_data = data.get(RESPONSES).get(cls.Meta.table_name)  # type: ignore

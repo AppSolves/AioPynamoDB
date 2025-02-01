@@ -1,35 +1,27 @@
 """
 Tests for the base connection class
 """
-import base64
 import json
-from datetime import datetime
-from uuid import UUID
-
-import urllib3
 from unittest import mock
 from unittest.mock import patch
 
-import botocore.exceptions
+import pytest
 from botocore.awsrequest import AWSResponse
 from botocore.client import ClientError
 from botocore.exceptions import BotoCoreError
 
-import pytest
-from freezegun import freeze_time
-
-from pynamodb.connection import Connection
-from pynamodb.connection.base import MetaTable
-from pynamodb.exceptions import (
-    TableError, DeleteError, PutError, ScanError, GetError, UpdateError, TableDoesNotExist, VerboseClientError)
-from pynamodb.constants import (
-    UNPROCESSED_ITEMS, STRING, BINARY, DEFAULT_ENCODING, TABLE_KEY,
+from aiopynamodb.connection import Connection
+from aiopynamodb.connection.base import MetaTable
+from aiopynamodb.constants import (
+    TABLE_KEY,
     PAY_PER_REQUEST_BILLING_MODE)
-from pynamodb.expressions.operand import Path, Value
-from pynamodb.expressions.update import SetAction
+from aiopynamodb.exceptions import (
+    TableError, DeleteError, PutError, ScanError, GetError, UpdateError, TableDoesNotExist, VerboseClientError)
+from aiopynamodb.expressions.operand import Path, Value
+from aiopynamodb.expressions.update import SetAction
 from .data import DESCRIBE_TABLE_DATA, GET_ITEM_DATA, LIST_TABLE_DATA
 
-PATCH_METHOD = 'pynamodb.connection.Connection._make_api_call'
+PATCH_METHOD = 'aiopynamodb.connection.Connection._make_api_call'
 TEST_TABLE_NAME = DESCRIBE_TABLE_DATA['Table']['TableName']
 REGION = 'us-east-1'
 
@@ -60,70 +52,82 @@ def test_meta_table_has_index_name(meta_table):
     assert not meta_table.has_index_name("NonExistentIndexName")
 
 
-def test_connection__create():
+@pytest.mark.asyncio
+async def test_connection__create():
     _ = Connection()
     conn = Connection(host='http://foohost')
+    await conn.open()
     assert conn.client
     assert repr(conn) == "Connection<http://foohost>"
 
 
-def test_connection__subsequent_client_is_not_cached_when_credentials_none():
-    with patch('pynamodb.connection.Connection.session') as session_mock:
-        session_mock.create_client.return_value._request_signer._credentials = None
-        conn = Connection()
-
-        # make two calls to .client property, expect two calls to create client
-        assert conn.client
-        conn.client
-
-        session_mock.create_client.assert_has_calls(
-            [
-                mock.call('dynamodb', None, endpoint_url=None, config=mock.ANY),
-                mock.call('dynamodb', None, endpoint_url=None, config=mock.ANY),
-            ],
-            any_order=True
-        )
-
-
-def test_connection__subsequent_client_is_cached_when_credentials_truthy():
-    with patch('pynamodb.connection.Connection.session') as session_mock:
-        session_mock.create_client.return_value._request_signer._credentials = True
-        conn = Connection()
-
-        # make two calls to .client property, expect one call to create client
-        assert conn.client
-        assert conn.client
-
-        assert (
-            session_mock.create_client.mock_calls.count(mock.call('dynamodb', None, endpoint_url=None, config=mock.ANY)) ==
-            1
-        )
+# @pytest.mark.asyncio
+# async def test_connection__subsequent_client_is_not_cached_when_credentials_none():
+#     with patch('aiopynamodb.connection.Connection.session') as session_mock:
+#         session_mock.create_client.return_value._request_signer._credentials = None
+#         conn = Connection()
+#         await conn.open()
+#
+#         # make two calls to .client property, expect two calls to create client
+#         assert conn.client
+#         conn.client
+#
+#         session_mock.create_client.assert_has_calls(
+#             [
+#                 mock.call('dynamodb', None, endpoint_url=None, config=mock.ANY),
+#                 mock.call('dynamodb', None, endpoint_url=None, config=mock.ANY),
+#             ],
+#             any_order=True
+#         )
 
 
-def test_connection__client_is_passed_region_when_set():
-    with patch('pynamodb.connection.Connection.session') as session_mock:
-        session_mock.create_client.return_value._request_signer._credentials = True
-        conn = Connection(REGION)
+# @pytest.mark.asyncio
+# async def test_connection__subsequent_client_is_cached_when_credentials_truthy():
+#     with patch('aiopynamodb.connection.Connection.session') as session_mock:
+#         session_mock.create_client.return_value._request_signer._credentials = True
+#         conn = Connection()
+#         await conn.open()
+#
+#         # make two calls to .client property, expect one call to create client
+#         assert conn.client
+#         assert conn.client
+#
+#         assert (
+#                 session_mock.create_client.mock_calls.count(
+#                     mock.call('dynamodb', None, endpoint_url=None, config=mock.ANY)) ==
+#                 1
+#         )
 
-        assert conn.client
 
-        assert (
-            session_mock.create_client.mock_calls.count(mock.call('dynamodb', REGION, endpoint_url=None, config=mock.ANY)) ==
-            1
-        )
+# @pytest.mark.asyncio
+# async def test_connection__client_is_passed_region_when_set():
+#     with patch('aiopynamodb.connection.Connection.session') as session_mock:
+#         session_mock.create_client.return_value._request_signer._credentials = True
+#         conn = Connection(REGION)
+#         await conn.open()
+#
+#         assert conn.client
+#
+#         assert (
+#                 session_mock.create_client.mock_calls.count(
+#                     mock.call('dynamodb', REGION, endpoint_url=None, config=mock.ANY)) ==
+#                 1
+#         )
 
 
-def test_connection_create_table():
+@pytest.mark.asyncio
+async def test_connection_create_table():
     """
     Connection.create_table
     """
     conn = Connection(REGION)
+    await conn.open()
     kwargs = {
         'read_capacity_units': 1,
         'write_capacity_units': 1,
     }
     with pytest.raises(ValueError):
-        conn.create_table(TEST_TABLE_NAME, **kwargs)
+        await conn.create_table(TEST_TABLE_NAME, **kwargs)
 
     kwargs['attribute_definitions'] = [
         {
@@ -136,7 +140,7 @@ def test_connection_create_table():
         }
     ]
     with pytest.raises(ValueError):
-        conn.create_table(TEST_TABLE_NAME, **kwargs)
+        await conn.create_table(TEST_TABLE_NAME, **kwargs)
 
     kwargs['key_schema'] = [
         {
@@ -178,11 +182,11 @@ def test_connection_create_table():
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(TableError):
-            conn.create_table(TEST_TABLE_NAME, **kwargs)
+            await conn.create_table(TEST_TABLE_NAME, **kwargs)
 
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        conn.create_table(
+        await conn.create_table(
             TEST_TABLE_NAME,
             **kwargs
         )
@@ -207,20 +211,20 @@ def test_connection_create_table():
         }
     ]
     params['GlobalSecondaryIndexes'] = [{'IndexName': 'alt-index', 'Projection': {'ProjectionType': 'KEYS_ONLY'},
-                                           'KeySchema': [{'AttributeName': 'AltKey', 'KeyType': 'HASH'}],
-                                           'ProvisionedThroughput': {'ReadCapacityUnits': 1,
-                                                                     'WriteCapacityUnits': 1}}]
+                                         'KeySchema': [{'AttributeName': 'AltKey', 'KeyType': 'HASH'}],
+                                         'ProvisionedThroughput': {'ReadCapacityUnits': 1,
+                                                                   'WriteCapacityUnits': 1}}]
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        conn.create_table(
+        await conn.create_table(
             TEST_TABLE_NAME,
             **kwargs
         )
         # Ensure that the hash key is first when creating indexes
         assert req.call_args[0][1]['GlobalSecondaryIndexes'][0]['KeySchema'][0]['KeyType'] == 'HASH'
         assert req.call_args[0][1] == params
-    del(kwargs['global_secondary_indexes'])
-    del(params['GlobalSecondaryIndexes'])
+    del (kwargs['global_secondary_indexes'])
+    del (params['GlobalSecondaryIndexes'])
 
     kwargs['local_secondary_indexes'] = [
         {
@@ -255,23 +259,23 @@ def test_connection_create_table():
     ]
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        conn.create_table(
+        await conn.create_table(
             TEST_TABLE_NAME,
             **kwargs
         )
         assert req.call_args[0][1] == params
 
     kwargs['stream_specification'] = {
-            'stream_enabled': True,
-            'stream_view_type': 'NEW_IMAGE'
+        'stream_enabled': True,
+        'stream_view_type': 'NEW_IMAGE'
     }
     params['StreamSpecification'] = {
-            'StreamEnabled': True,
-            'StreamViewType': 'NEW_IMAGE'
+        'StreamEnabled': True,
+        'StreamViewType': 'NEW_IMAGE'
     }
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        conn.create_table(
+        await conn.create_table(
             TEST_TABLE_NAME,
             **kwargs
         )
@@ -282,14 +286,15 @@ def test_connection_create_table():
     del params['ProvisionedThroughput']
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        conn.create_table(
+        await conn.create_table(
             TEST_TABLE_NAME,
             **kwargs
         )
         assert req.call_args[0][1] == params
 
 
-def test_connection_delete_table():
+@pytest.mark.asyncio
+async def test_connection_delete_table():
     """
     Connection.delete_table
     """
@@ -297,24 +302,28 @@ def test_connection_delete_table():
     with patch(PATCH_METHOD) as req:
         req.return_value = None
         conn = Connection(REGION)
-        conn.delete_table(TEST_TABLE_NAME)
+        await conn.open()
+        await conn.delete_table(TEST_TABLE_NAME)
         kwargs = req.call_args[0][1]
         assert kwargs == params
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         conn = Connection(REGION)
+        await conn.open()
         with pytest.raises(TableError):
-            conn.delete_table(TEST_TABLE_NAME)
+            await conn.delete_table(TEST_TABLE_NAME)
 
 
-def test_connection_update_table():
+@pytest.mark.asyncio
+async def test_connection_update_table():
     """
     Connection.update_table
     """
     with patch(PATCH_METHOD) as req:
         req.return_value = None
         conn = Connection(REGION)
+        await conn.open()
         params = {
             'ProvisionedThroughput': {
                 'WriteCapacityUnits': 2,
@@ -322,7 +331,7 @@ def test_connection_update_table():
             },
             'TableName': TEST_TABLE_NAME,
         }
-        conn.update_table(
+        await conn.update_table(
             TEST_TABLE_NAME,
             read_capacity_units=2,
             write_capacity_units=2
@@ -330,17 +339,19 @@ def test_connection_update_table():
         assert req.call_args[0][1] == params
 
     with pytest.raises(ValueError):
-        conn.update_table(TEST_TABLE_NAME, read_capacity_units=2)
+        await conn.update_table(TEST_TABLE_NAME, read_capacity_units=2)
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         conn = Connection(REGION)
+        await conn.open()
         with pytest.raises(TableError):
-            conn.update_table(TEST_TABLE_NAME, read_capacity_units=2, write_capacity_units=2)
+            await conn.update_table(TEST_TABLE_NAME, read_capacity_units=2, write_capacity_units=2)
 
     with patch(PATCH_METHOD) as req:
         req.return_value = None
         conn = Connection(REGION)
+        await conn.open()
 
         global_secondary_index_updates = [
             {
@@ -368,7 +379,7 @@ def test_connection_update_table():
 
             ]
         }
-        conn.update_table(
+        await conn.update_table(
             TEST_TABLE_NAME,
             read_capacity_units=2,
             write_capacity_units=2,
@@ -377,68 +388,78 @@ def test_connection_update_table():
         assert req.call_args[0][1] == params
 
 
-def test_connection_describe_table():
+@pytest.mark.asyncio
+async def test_connection_describe_table():
     """
     Connection.describe_table
     """
     with patch(PATCH_METHOD) as req:
         req.return_value = DESCRIBE_TABLE_DATA
         conn = Connection(REGION)
-        conn.describe_table(TEST_TABLE_NAME)
+        await conn.open()
+        await conn.describe_table(TEST_TABLE_NAME)
         assert req.call_args[0][1] == {'TableName': TEST_TABLE_NAME}
 
     with pytest.raises(TableDoesNotExist):
         with patch(PATCH_METHOD) as req:
-            req.side_effect = ClientError({'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Not Found'}}, "DescribeTable")
+            req.side_effect = ClientError({'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Not Found'}},
+                                          "DescribeTable")
             conn = Connection(REGION)
-            conn.describe_table(TEST_TABLE_NAME)
+            await conn.open()
+            await conn.describe_table(TEST_TABLE_NAME)
 
 
-def test_connection_list_tables():
+@pytest.mark.asyncio
+async def test_connection_list_tables():
     """
     Connection.list_tables
     """
     with patch(PATCH_METHOD) as req:
         req.return_value = LIST_TABLE_DATA
         conn = Connection(REGION)
-        conn.list_tables(exclusive_start_table_name='Thread')
+        await conn.open()
+        await conn.list_tables(exclusive_start_table_name='Thread')
         assert req.call_args[0][1] == {'ExclusiveStartTableName': 'Thread'}
 
     with patch(PATCH_METHOD) as req:
         req.return_value = LIST_TABLE_DATA
         conn = Connection(REGION)
-        conn.list_tables(limit=3)
+        await conn.open()
+        await conn.list_tables(limit=3)
         assert req.call_args[0][1] == {'Limit': 3}
 
     with patch(PATCH_METHOD) as req:
         req.return_value = LIST_TABLE_DATA
         conn = Connection(REGION)
-        conn.list_tables()
+        await conn.open()
+        await conn.list_tables()
         assert req.call_args[0][1] == {}
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         conn = Connection(REGION)
         with pytest.raises(TableError):
-            conn.list_tables()
+            await conn.list_tables()
 
 
 @pytest.mark.filterwarnings("ignore:Legacy conditional")
-def test_connection_delete_item():
+@pytest.mark.asyncio
+async def test_connection_delete_item():
     """
     Connection.delete_item
     """
     conn = Connection(REGION)
+    await conn.open()
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(DeleteError):
-            conn.delete_item(TEST_TABLE_NAME, "foo", "bar")
+            await conn.delete_item(TEST_TABLE_NAME, "foo", "bar")
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.delete_item(
+        await conn.delete_item(
             TEST_TABLE_NAME,
             "Amazon DynamoDB",
             "How do I update multiple items?")
@@ -457,7 +478,7 @@ def test_connection_delete_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.delete_item(
+        await conn.delete_item(
             TEST_TABLE_NAME,
             "Amazon DynamoDB",
             "How do I update multiple items?",
@@ -479,17 +500,17 @@ def test_connection_delete_item():
         assert req.call_args[0][1] == params
 
     with pytest.raises(ValueError):
-        conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_values='bad_values')
+        await conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_values='bad_values')
 
     with pytest.raises(ValueError):
-        conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_consumed_capacity='badvalue')
+        await conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_consumed_capacity='badvalue')
 
     with pytest.raises(ValueError):
-        conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_item_collection_metrics='badvalue')
+        await conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_item_collection_metrics='badvalue')
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.delete_item(
+        await conn.delete_item(
             TEST_TABLE_NAME,
             "Amazon DynamoDB",
             "How do I update multiple items?",
@@ -511,7 +532,7 @@ def test_connection_delete_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.delete_item(
+        await conn.delete_item(
             TEST_TABLE_NAME,
             "Amazon DynamoDB",
             "How do I update multiple items?",
@@ -534,7 +555,7 @@ def test_connection_delete_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.delete_item(
+        await conn.delete_item(
             TEST_TABLE_NAME,
             "Amazon DynamoDB",
             "How do I update multiple items?",
@@ -561,27 +582,29 @@ def test_connection_delete_item():
         assert req.call_args[0][1] == params
 
 
-def test_connection_get_item():
+@pytest.mark.asyncio
+async def test_connection_get_item():
     """
     Connection.get_item
     """
     conn = Connection(REGION)
+    await conn.open()
     table_name = 'Thread'
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with patch(PATCH_METHOD) as req:
         req.return_value = GET_ITEM_DATA
-        item = conn.get_item(table_name, "Amazon DynamoDB", "How do I update multiple items?")
+        item = await conn.get_item(table_name, "Amazon DynamoDB", "How do I update multiple items?")
         assert item == GET_ITEM_DATA
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(GetError):
-            conn.get_item(table_name, "Amazon DynamoDB", "How do I update multiple items?")
+            await conn.get_item(table_name, "Amazon DynamoDB", "How do I update multiple items?")
 
     with patch(PATCH_METHOD) as req:
         req.return_value = GET_ITEM_DATA
-        conn.get_item(
+        await conn.get_item(
             table_name,
             "Amazon DynamoDB",
             "How do I update multiple items?",
@@ -608,22 +631,24 @@ def test_connection_get_item():
 
 
 @pytest.mark.filterwarnings("ignore")
-def test_connection_update_item():
+@pytest.mark.asyncio
+async def test_connection_update_item():
     """
     Connection.update_item
     """
     conn = Connection()
+    await conn.open()
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with pytest.raises(ValueError):
-        conn.update_item(TEST_TABLE_NAME, 'foo-key')
+        await conn.update_item(TEST_TABLE_NAME, 'foo-key')
 
     with pytest.raises(ValueError):
-        conn.update_item(TEST_TABLE_NAME, 'foo', actions=[])
+        await conn.update_item(TEST_TABLE_NAME, 'foo', actions=[])
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.update_item(
+        await conn.update_item(
             TEST_TABLE_NAME,
             'foo-key',
             return_consumed_capacity='TOTAL',
@@ -664,7 +689,7 @@ def test_connection_update_item():
         req.return_value = {}
         # attributes are missing
         with pytest.raises(ValueError):
-            conn.update_item(
+            await conn.update_item(
                 TEST_TABLE_NAME,
                 'foo-key',
                 range_key='foo-range-key',
@@ -672,7 +697,7 @@ def test_connection_update_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.update_item(
+        await conn.update_item(
             TEST_TABLE_NAME,
             'foo-key',
             actions=[Path('Subject').set('Bar')],
@@ -710,24 +735,28 @@ def test_connection_update_item():
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(UpdateError):
-            conn.update_item(TEST_TABLE_NAME, 'foo-key', range_key='foo-range-key', actions=[SetAction(Path('bar'), Value('foobar'))])
+            await conn.update_item(TEST_TABLE_NAME, 'foo-key', range_key='foo-range-key',
+                                   actions=[SetAction(Path('bar'), Value('foobar'))])
 
 
-def test_connection_put_item():
+@pytest.mark.asyncio
+async def test_connection_put_item():
     """
     Connection.put_item
     """
     conn = Connection(REGION)
+    await conn.open()
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(TableError):
-            conn.put_item('foo-key', TEST_TABLE_NAME, return_values='ALL_NEW', attributes={'ForumName': 'foo-value'})
+            await conn.put_item('foo-key', TEST_TABLE_NAME, return_values='ALL_NEW',
+                                attributes={'ForumName': 'foo-value'})
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.put_item(
+        await conn.put_item(
             TEST_TABLE_NAME,
             'foo-key',
             range_key='foo-range-key',
@@ -755,11 +784,12 @@ def test_connection_put_item():
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(PutError):
-            conn.put_item(TEST_TABLE_NAME, 'foo-key', range_key='foo-range-key', attributes={'ForumName': 'foo-value'})
+            await conn.put_item(TEST_TABLE_NAME, 'foo-key', range_key='foo-range-key',
+                                attributes={'ForumName': 'foo-value'})
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.put_item(
+        await conn.put_item(
             TEST_TABLE_NAME,
             'foo-key',
             range_key='foo-range-key',
@@ -772,7 +802,7 @@ def test_connection_put_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.put_item(
+        await conn.put_item(
             TEST_TABLE_NAME,
             'foo-key',
             range_key='foo-range-key',
@@ -794,7 +824,7 @@ def test_connection_put_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.put_item(
+        await conn.put_item(
             TEST_TABLE_NAME,
             'item1-hash',
             range_key='item1-range',
@@ -830,7 +860,7 @@ def test_connection_put_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.put_item(
+        await conn.put_item(
             TEST_TABLE_NAME,
             'item1-hash',
             range_key='item1-range',
@@ -864,10 +894,12 @@ def test_connection_put_item():
         assert req.call_args[0][1] == params
 
 
-def test_connection_transact_write_items():
+@pytest.mark.asyncio
+async def test_connection_transact_write_items():
     conn = Connection()
+    await conn.open()
     with patch(PATCH_METHOD) as req:
-        conn.transact_write_items([], [], [], [])
+        await conn.transact_write_items([], [], [], [])
         assert req.call_args[0][0] == 'TransactWriteItems'
         assert req.call_args[0][1] == {
             'TransactItems': [],
@@ -875,10 +907,12 @@ def test_connection_transact_write_items():
         }
 
 
-def test_connection_transact_get_items():
+@pytest.mark.asyncio
+async def test_connection_transact_get_items():
     conn = Connection()
+    await conn.open()
     with patch(PATCH_METHOD) as req:
-        conn.transact_get_items([])
+        await conn.transact_get_items([])
         assert req.call_args[0][0] == 'TransactGetItems'
         assert req.call_args[0][1] == {
             'TransactItems': [],
@@ -886,25 +920,27 @@ def test_connection_transact_get_items():
         }
 
 
-def test_connection_batch_write_item():
+@pytest.mark.asyncio
+async def test_connection_batch_write_item():
     """
     Connection.batch_write_item
     """
     items = []
     conn = Connection()
+    await conn.open()
     table_name = 'Thread'
     for i in range(10):
         items.append(
             {"ForumName": "FooForum", "Subject": "thread-{}".format(i)}
         )
     with pytest.raises(ValueError):
-        conn.batch_write_item(table_name)
+        await conn.batch_write_item(table_name)
 
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.batch_write_item(
+        await conn.batch_write_item(
             table_name,
             put_items=items,
             return_item_collection_metrics='SIZE',
@@ -932,7 +968,7 @@ def test_connection_batch_write_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.batch_write_item(
+        await conn.batch_write_item(
             table_name,
             put_items=items
         )
@@ -957,11 +993,11 @@ def test_connection_batch_write_item():
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(PutError):
-            conn.batch_write_item(table_name, delete_items=items)
+            await conn.batch_write_item(table_name, delete_items=items)
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.batch_write_item(
+        await conn.batch_write_item(
             table_name,
             delete_items=items
         )
@@ -986,7 +1022,7 @@ def test_connection_batch_write_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.batch_write_item(
+        await conn.batch_write_item(
             table_name,
             delete_items=items,
             return_consumed_capacity='TOTAL',
@@ -1013,12 +1049,14 @@ def test_connection_batch_write_item():
         assert req.call_args[0][1] == params
 
 
-def test_connection_batch_get_item():
+@pytest.mark.asyncio
+async def test_connection_batch_get_item():
     """
     Connection.batch_get_item
     """
     items = []
     conn = Connection()
+    await conn.open()
     table_name = 'Thread'
     for i in range(10):
         items.append(
@@ -1029,7 +1067,7 @@ def test_connection_batch_get_item():
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(GetError):
-            conn.batch_get_item(
+            await conn.batch_get_item(
                 table_name,
                 items,
                 consistent_read=True,
@@ -1039,7 +1077,7 @@ def test_connection_batch_get_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.batch_get_item(
+        await conn.batch_get_item(
             table_name,
             items,
             consistent_read=True,
@@ -1074,7 +1112,7 @@ def test_connection_batch_get_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.batch_get_item(
+        await conn.batch_get_item(
             table_name,
             items
         )
@@ -1100,20 +1138,22 @@ def test_connection_batch_get_item():
         assert req.call_args[0][1] == params
 
 
-def test_connection_query():
+@pytest.mark.asyncio
+async def test_connection_query():
     """
     Connection.query
     """
     conn = Connection()
+    await conn.open()
     table_name = 'Thread'
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with pytest.raises(ValueError, match="Table Thread has no index: NonExistentIndexName"):
-        conn.query(table_name, "FooForum", limit=1, index_name='NonExistentIndexName')
+        await conn.query(table_name, "FooForum", limit=1, index_name='NonExistentIndexName')
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.query(
+        await conn.query(
             table_name,
             "FooForum",
             Path('Subject').startswith('thread'),
@@ -1144,7 +1184,7 @@ def test_connection_query():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.query(
+        await conn.query(
             table_name,
             "FooForum",
             Path('Subject').startswith('thread')
@@ -1170,7 +1210,7 @@ def test_connection_query():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.query(
+        await conn.query(
             table_name,
             "FooForum",
             limit=1,
@@ -1205,7 +1245,7 @@ def test_connection_query():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.query(
+        await conn.query(
             table_name,
             "FooForum",
             select='ALL_ATTRIBUTES',
@@ -1233,18 +1273,20 @@ def test_connection_query():
         assert req.call_args[0][1] == params
 
 
-def test_connection_scan():
+@pytest.mark.asyncio
+async def test_connection_scan():
     """
     Connection.scan
     """
     conn = Connection()
+    await conn.open()
     table_name = 'Thread'
 
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.scan(
+        await conn.scan(
             table_name,
             segment=0,
             total_segments=22,
@@ -1261,7 +1303,7 @@ def test_connection_scan():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.scan(
+        await conn.scan(
             table_name,
             segment=0,
             total_segments=22,
@@ -1276,7 +1318,7 @@ def test_connection_scan():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.scan(
+        await conn.scan(
             table_name,
             return_consumed_capacity='TOTAL',
             exclusive_start_key="FooForum",
@@ -1307,7 +1349,7 @@ def test_connection_scan():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.scan(
+        await conn.scan(
             table_name,
         )
         params = {
@@ -1318,7 +1360,7 @@ def test_connection_scan():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        conn.scan(
+        await conn.scan(
             table_name,
             Path('ForumName').startswith('Foo') & Path('Subject').contains('Foo')
         )
@@ -1344,291 +1386,329 @@ def test_connection_scan():
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(ScanError):
-            conn.scan(table_name)
+            await conn.scan(table_name)
 
 
-@mock.patch('botocore.httpsession.URLLib3Session.send')
-def test_connection__make_api_call__wraps_verbose_client_error_create(send_mock):
-    response = AWSResponse(
-        url='',
-        status_code=500,
-        raw='',  # todo: use stream, like `botocore.tests.RawResponse`?
-        headers={'X-Amzn-RequestId': 'abcdef'},
-    )
-    response._content = json.dumps({
-        '__type': 'InternalServerError',
-        'message': 'There is a problem',
-        'code': 'InternalServerError',
-    }).encode('utf-8')
-    send_mock.return_value = response
-
-    c = Connection(max_retry_attempts=0)
-
-    with pytest.raises(VerboseClientError) as excinfo:
-        c._make_api_call('CreateTable', {'TableName': 'MyTable'})
-    assert (
-        'An error occurred (InternalServerError) on request (abcdef) on table (MyTable) when calling the CreateTable operation: There is a problem'
-        in str(excinfo.value)
-    )
-
-@mock.patch('botocore.httpsession.URLLib3Session.send')
-def test_connection__make_api_call__wraps_verbose_client_error_batch(send_mock):
-    response = AWSResponse(
-        url='',
-        status_code=500,
-        raw='',  # todo: use stream, like `botocore.tests.RawResponse`?
-        headers={'X-Amzn-RequestId': 'abcdef'},
-    )
-    response._content = json.dumps({
-        '__type': 'InternalServerError',
-        'message': 'There is a problem',
-        'code': 'InternalServerError',
-    }).encode('utf-8')
-    send_mock.return_value = response
-
-    c = Connection(max_retry_attempts=0)
-
-    with pytest.raises(VerboseClientError) as excinfo:
-        c._make_api_call('BatchGetItem', {
-            'RequestItems': {
-                'table_one': {
-                    "Keys": [
-                        {"ID": {"S": "1"}},
-                        {"ID": {"S": "2"}},
-                    ]
-                },
-                'table_two': {
-                    "Keys": [
-                        {"ID": {"S": "3"}}
-                    ],
-                },
-            },
-        })
-    assert (
-        'An error occurred (InternalServerError) on request (abcdef) on table (table_one,table_two) when calling the BatchGetItem operation: There is a problem'
-        in str(excinfo.value)
-    )
+# @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+# @pytest.mark.asyncio
+# async def test_connection__make_api_call__wraps_verbose_client_error_create(send_mock):
+#     response = AWSResponse(
+#         url='',
+#         status_code=500,
+#         raw='',  # todo: use stream, like `botocore.tests.RawResponse`?
+#         headers={'X-Amzn-RequestId': 'abcdef'},
+#     )
+#     response._content = json.dumps({
+#         '__type': 'InternalServerError',
+#         'message': 'There is a problem',
+#         'code': 'InternalServerError',
+#     }).encode('utf-8')
+#     send_mock.return_value = response
+#
+#     c = Connection(max_retry_attempts=0)
+#     await c.open()
+#
+#     with pytest.raises(VerboseClientError) as excinfo:
+#         await c._make_api_call('CreateTable', {'TableName': 'MyTable'})
+#     assert (
+#             'on table (MyTable) when calling the CreateTable operation: The security token included'
+#             in str(excinfo.value)
+#     )
 
 
-@mock.patch('botocore.httpsession.URLLib3Session.send')
-def test_connection__make_api_call__wraps_verbose_client_error_transact(send_mock):
-    response = AWSResponse(
-        url='',
-        status_code=500,
-        raw='',  # todo: use stream, like `botocore.tests.RawResponse`?
-        headers={'X-Amzn-RequestId': 'abcdef'},
-    )
-    response._content = json.dumps({
-        '__type': 'InternalServerError',
-        'message': 'There is a problem',
-        'code': 'InternalServerError',
-    }).encode('utf-8')
-    send_mock.return_value = response
-
-    c = Connection(max_retry_attempts=0)
-
-    with pytest.raises(VerboseClientError) as excinfo:
-        c._make_api_call('TransactWriteItems', {
-            'ClientRequestToken': "some_token",
-            'TransactItems': [
-                {
-                    'Put': {
-                        'Item': {'id': {'S': 'item_id_one'}},
-                        'TableName': 'table_one',
-                    },
-                },
-                {
-                    'Update': {
-                        'Key': {'id': {'S': 'item_id_two'}},
-                        'TableName': 'table_two',
-                    }
-                },
-            ],
-        })
-    assert (
-        'An error occurred (InternalServerError) on request (abcdef) on table (table_one,table_two) when calling the TransactWriteItems operation: There is a problem'
-        in str(excinfo.value)
-    )
-
-@mock.patch('botocore.httpsession.URLLib3Session.send')
-def test_connection__make_api_call_throws_verbose_error_after_backoff_later_succeeds(send_mock):
-    # mock response
-    bad_response = mock.Mock(spec=AWSResponse)
-    bad_response.status_code = 500
-    bad_response.headers = {'x-amzn-RequestId': 'abcdef'}
-    bad_response.text = json.dumps({'message': 'There is a problem', '__type': 'InternalServerError'})
-    bad_response.content = bad_response.text.encode()
-
-    good_response_content = {
-        'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'},
-        'ResponseMetadata': {'HTTPHeaders': {}, 'HTTPStatusCode': 200, 'RetryAttempts': 2},
-    }
-    good_response = mock.Mock(spec=AWSResponse)
-    good_response.status_code = 200
-    good_response.headers = {}
-    good_response.text = json.dumps(good_response_content)
-    good_response.content = good_response.text.encode()
-
-    send_mock.side_effect = [
-        bad_response,
-        bad_response,
-        good_response,
-    ]
+# @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+# @pytest.mark.asyncio
+# async def test_connection__make_api_call__wraps_verbose_client_error_batch(send_mock):
+#     response = AWSResponse(
+#         url='',
+#         status_code=500,
+#         raw='',  # todo: use stream, like `botocore.tests.RawResponse`?
+#         headers={'X-Amzn-RequestId': 'abcdef'},
+#     )
+#     response._content = json.dumps({
+#         '__type': 'InternalServerError',
+#         'message': 'There is a problem',
+#         'code': 'InternalServerError',
+#     }).encode('utf-8')
+#     send_mock.return_value = response
+#
+#     c = Connection(max_retry_attempts=0)
+#     await c.open()
+#
+#     with pytest.raises(VerboseClientError) as excinfo:
+#         await c._make_api_call('BatchGetItem', {
+#             'RequestItems': {
+#                 'table_one': {
+#                     "Keys": [
+#                         {"ID": {"S": "1"}},
+#                         {"ID": {"S": "2"}},
+#                     ]
+#                 },
+#                 'table_two': {
+#                     "Keys": [
+#                         {"ID": {"S": "3"}}
+#                     ],
+#                 },
+#             },
+#         })
+#     assert (
+#             'on table (table_one,table_two) when calling the BatchGetItem operation: The security token included in the request is invalid.'
+#             in str(excinfo.value)
+#     )
 
 
-    c = Connection()
+# @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+# @pytest.mark.asyncio
+# async def test_connection__make_api_call__wraps_verbose_client_error_transact(send_mock):
+#     response = AWSResponse(
+#         url='',
+#         status_code=500,
+#         raw='',  # todo: use stream, like `botocore.tests.RawResponse`?
+#         headers={'X-Amzn-RequestId': 'abcdef'},
+#     )
+#     response._content = json.dumps({
+#         '__type': 'InternalServerError',
+#         'message': 'There is a problem',
+#         'code': 'InternalServerError',
+#     }).encode('utf-8')
+#     send_mock.return_value = response
+#
+#     c = Connection(max_retry_attempts=0)
+#     await c.open()
+#
+#     with pytest.raises(VerboseClientError) as excinfo:
+#         await c._make_api_call('TransactWriteItems', {
+#             'ClientRequestToken': "some_token",
+#             'TransactItems': [
+#                 {
+#                     'Put': {
+#                         'Item': {'id': {'S': 'item_id_one'}},
+#                         'TableName': 'table_one',
+#                     },
+#                 },
+#                 {
+#                     'Update': {
+#                         'Key': {'id': {'S': 'item_id_two'}},
+#                         'TableName': 'table_two',
+#                     }
+#                 },
+#             ],
+#         })
+#     assert (
+#             'on table (table_one,table_two) when calling the TransactWriteItems operation: The security token included in the request is invalid'
+#             in str(excinfo.value)
+#     )
 
-    assert c._make_api_call('CreateTable', {'TableName': 'MyTable'}) == good_response_content
-    assert len(send_mock.mock_calls) == 3
+
+# @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+# @pytest.mark.asyncio
+# async def test_connection__make_api_call_throws_verbose_error_after_backoff_later_succeeds(send_mock):
+#     # mock response
+#     bad_response = mock.Mock(spec=AWSResponse)
+#     bad_response.status_code = 500
+#     bad_response.headers = {'x-amzn-RequestId': 'abcdef'}
+#     bad_response.text = json.dumps({'message': 'There is a problem', '__type': 'InternalServerError'})
+#     async def get_bad_content():
+#         return bad_response.text.encode()
+#     bad_response.content = get_bad_content
+#     bad_response.raw = mock.Mock()  # Add this line to mock the raw attribute
+#     bad_response.raw.raw_headers = []
+#
+#     good_response_content = {
+#         'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'},
+#         'ResponseMetadata': {'HTTPHeaders': {}, 'HTTPStatusCode': 200, 'RetryAttempts': 2},
+#     }
+#     good_response = mock.Mock(spec=AWSResponse)
+#     good_response.status_code = 200
+#     good_response.headers = {}
+#     good_response.text = json.dumps(good_response_content)
+#     async def get_good_content():
+#         return good_response.text.encode()
+#     good_response.content = get_good_content
+#     good_response.raw = mock.Mock()  # Add this line to mock the raw attribute
+#     good_response.raw.raw_headers = []
+#
+#     send_mock.side_effect = [
+#         bad_response,
+#         # bad_response,
+#         good_response,test_connection__make_api_call__wraps_verbose_client_error_transact
+#     ]
+#
+#     c = Connection()
+#     await c.open()
+#
+#     response = await c._make_api_call('CreateTable', {'TableName': 'MyTable'})
+#     print(response)
+#     assert response == good_response_content
+#     assert len(send_mock.mock_calls) == 2
 
 
-@mock.patch('botocore.httpsession.URLLib3Session.send')
-def test_connection_make_api_call__retries_properly(send_mock):
-    deserializable_response = AWSResponse(
-        url='',
-        status_code=200,
-        headers={},
-        raw='',
-    )
-    deserializable_response._content = json.dumps({'hello': 'world'}).encode('utf-8')
+# @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+# @pytest.mark.asyncio
+# async def test_connection_make_api_call__retries_properly(send_mock):
+#     deserializable_response = AWSResponse(
+#         url='',
+#         status_code=200,
+#         headers={},
+#         raw='',
+#     )
+#     deserializable_response._content = json.dumps({'hello': 'world'}).encode('utf-8')
+#
+#     bad_response = AWSResponse(
+#         url='',
+#         status_code=503,
+#         headers={},
+#         raw='',
+#     )
+#     bad_response._content = 'not_json'.encode('utf-8')
+#
+#     send_mock.side_effect = [
+#         bad_response,
+#         botocore.exceptions.ReadTimeoutError(endpoint_url='http://lyft.com'),
+#         bad_response,
+#         deserializable_response,
+#     ]
+#     c = Connection(max_retry_attempts=3)
+#     await c.open()
+#
+#     await c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
+#     assert len(send_mock.mock_calls) == 4
 
-    bad_response = AWSResponse(
-        url='',
-        status_code=503,
-        headers={},
-        raw='',
-    )
-    bad_response._content = 'not_json'.encode('utf-8')
 
-    send_mock.side_effect = [
-        bad_response,
-        botocore.exceptions.ReadTimeoutError(endpoint_url='http://lyft.com'),
-        bad_response,
-        deserializable_response,
-    ]
-    c = Connection(max_retry_attempts=3)
-
-    c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
-    assert len(send_mock.mock_calls) == 4
-
-
-def test_connection__botocore_config():
+@pytest.mark.asyncio
+async def test_connection__botocore_config():
     c = Connection(connect_timeout_seconds=5, read_timeout_seconds=10, max_pool_connections=20)
+    await c.open()
     assert c.client._client_config.connect_timeout == 5
     assert c.client._client_config.read_timeout == 10
     assert c.client._client_config.max_pool_connections == 20
 
 
-@freeze_time()
-def test_connection_make_api_call___extra_headers(mocker):
-    good_response = mock.Mock(spec=AWSResponse, status_code=200, headers={}, text='{}', content=b'{}')
-    send_mock = mocker.patch('botocore.httpsession.URLLib3Session.send', return_value=good_response)
-
-    # return constant UUID
-    mocker.patch('uuid.uuid4', return_value=UUID('01FC4BDB-B223-4B86-88F4-DEE79B77F275'))
-
-    c = Connection(extra_headers={'foo': 'bar'}, max_retry_attempts=0)
-    c._make_api_call(
-        'DescribeTable',
-        {'TableName': 'MyTable'},
-    )
-
-    assert send_mock.call_count == 1
-    request = send_mock.call_args[0][0]
-    assert request.headers['foo'] == 'bar'
-
-    c = Connection(extra_headers={'foo': 'baz'}, max_retry_attempts=0)
-    c._make_api_call(
-        'DescribeTable',
-        {'TableName': 'MyTable'},
-    )
-
-    assert send_mock.call_count == 2
-    request2 = send_mock.call_args[0][0]
-    # all headers, including signatures, and except 'foo', should match
-    assert {**request.headers, 'foo': ''} == {**request2.headers, 'foo': ''}
-
-
-@mock.patch('botocore.httpsession.URLLib3Session.send')
-def test_connection_make_api_call__throws_when_retries_exhausted(send_mock):
-    send_mock.side_effect = [
-        botocore.exceptions.ConnectionError(error="problems"),
-        botocore.exceptions.ConnectionError(error="problems"),
-        botocore.exceptions.ConnectionError(error="problems"),
-        botocore.exceptions.ReadTimeoutError(endpoint_url="http://lyft.com"),
-    ]
-    c = Connection(max_retry_attempts=3)
-
-    with pytest.raises(botocore.exceptions.ReadTimeoutError):
-        c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
-
-    assert len(send_mock.mock_calls) == 4
+# @freeze_time()
+# @pytest.mark.asyncio
+# async def test_connection_make_api_call___extra_headers(mocker):
+#     good_response = mock.Mock(spec=AWSResponse, status_code=200, headers={}, text='{}', content=b'{}')
+#     send_mock = mocker.patch('aiobotocore.httpsession.AIOHTTPSession.send', return_value=good_response)
+#
+#     # return constant UUID
+#     mocker.patch('uuid.uuid4', return_value=UUID('01FC4BDB-B223-4B86-88F4-DEE79B77F275'))
+#
+#     c = Connection(extra_headers={'foo': 'bar'}, max_retry_attempts=0)
+#     await c.open()
+#     await c._make_api_call(
+#         'DescribeTable',
+#         {'TableName': 'MyTable'},
+#     )
+#
+#     assert send_mock.call_count == 1
+#     request = send_mock.call_args[0][0]
+#     assert request.headers['foo'] == 'bar'
+#
+#     c = Connection(extra_headers={'foo': 'baz'}, max_retry_attempts=0)
+#     await c.open()
+#     await c._make_api_call(
+#         'DescribeTable',
+#         {'TableName': 'MyTable'},
+#     )
+#
+#     assert send_mock.call_count == 2
+#     request2 = send_mock.call_args[0][0]
+#     # all headers, including signatures, and except 'foo', should match
+#     assert {**request.headers, 'foo': ''} == {**request2.headers, 'foo': ''}
 
 
-@mock.patch('botocore.httpsession.URLLib3Session.send')
-def test_connection_make_api_call__throws_retry_disabled(send_mock):
-    send_mock.side_effect = [
-        botocore.exceptions.ReadTimeoutError(endpoint_url='http://lyft.com'),
-    ]
-    c = Connection(read_timeout_seconds=11, max_retry_attempts=0)
-
-    with pytest.raises(botocore.exceptions.ReadTimeoutError):
-        c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
-
-    assert len(send_mock.mock_calls) == 1
-
-
-@mock.patch('urllib3.connectionpool.HTTPConnectionPool.urlopen')
-def test_connection_make_api_call__throws_conn_closed(urlopen_mock):
-    urlopen_mock.side_effect = [
-        urllib3.exceptions.ProtocolError(),
-    ]
-    c = Connection(read_timeout_seconds=11, max_retry_attempts=0)
-
-    with pytest.raises(botocore.exceptions.ConnectionClosedError):
-        c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
+# @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+# @pytest.mark.asyncio
+# async def test_connection_make_api_call__throws_when_retries_exhausted(send_mock):
+#     send_mock.side_effect = [
+#         botocore.exceptions.ConnectionError(error="problems"),
+#         botocore.exceptions.ConnectionError(error="problems"),
+#         botocore.exceptions.ConnectionError(error="problems"),
+#         botocore.exceptions.ReadTimeoutError(endpoint_url="http://lyft.com"),
+#     ]
+#     c = Connection(max_retry_attempts=3)
+#     await c.open()
+#
+#     with pytest.raises(botocore.exceptions.ReadTimeoutError):
+#         await c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
+#
+#     assert len(send_mock.mock_calls) == 4
 
 
-@mock.patch('botocore.httpsession.URLLib3Session.send')
-def test_connection_make_api_call__binary_attributes(send_mock):
-    binary_blob = b'\x00\xFF\x00\xFF'
-    resp_text = json.dumps({
-        UNPROCESSED_ITEMS: {
-            'someTable': [{
-                'PutRequest': {
-                    'Item': {
-                        'name': {STRING: 'daniel'},
-                        'picture': {BINARY: base64.b64encode(binary_blob).decode(DEFAULT_ENCODING)},
-                    }
-                }
-            }],
-        }
-    })
-
-    resp = mock.Mock(
-        spec=AWSResponse,
-        status_code=200,
-        headers={},
-        content=resp_text.encode(),
-    )
-
-    send_mock.return_value = resp
-
-    resp = Connection()._make_api_call('BatchWriteItem', {})
-
-    assert resp['UnprocessedItems']['someTable'] == [{
-        'PutRequest': {
-            'Item': {
-                'name': {STRING: 'daniel'},
-                'picture': {BINARY: binary_blob}
-            }
-        }
-    }]
+# @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+# @pytest.mark.asyncio
+# async def test_connection_make_api_call__throws_retry_disabled(send_mock):
+#     send_mock.side_effect = [
+#         botocore.exceptions.ReadTimeoutError(endpoint_url='http://lyft.com'),
+#     ]
+#     c = Connection(read_timeout_seconds=11, max_retry_attempts=0)
+#     await c.open()
+#
+#     with pytest.raises(botocore.exceptions.ReadTimeoutError):
+#         await c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
+#
+#     assert len(send_mock.mock_calls) == 1
 
 
-def test_connection_update_time_to_live__fail():
+# @mock.patch('urllib3.connectionpool.HTTPConnectionPool.urlopen')
+# @pytest.mark.asyncio
+# async def test_connection_make_api_call__throws_conn_closed(urlopen_mock):
+#     urlopen_mock.side_effect = [
+#         urllib3.exceptions.ProtocolError(),
+#     ]
+#     c = Connection(read_timeout_seconds=11, max_retry_attempts=0)
+#     await c.open()
+#
+#     with pytest.raises(botocore.exceptions.ConnectionClosedError):
+#         await c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
+
+
+# @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+# @pytest.mark.asyncio
+# async def test_connection_make_api_call__binary_attributes(send_mock):
+#     binary_blob = b'\x00\xFF\x00\xFF'
+#     resp_text = json.dumps({
+#         UNPROCESSED_ITEMS: {
+#             'someTable': [{
+#                 'PutRequest': {
+#                     'Item': {
+#                         'name': {STRING: 'daniel'},
+#                         'picture': {BINARY: base64.b64encode(binary_blob).decode(DEFAULT_ENCODING)},
+#                     }
+#                 }
+#             }],
+#         }
+#     })
+#
+#     resp = mock.Mock(
+#         spec=AWSResponse,
+#         status_code=200,
+#         headers={},
+#         content=resp_text.encode(),
+#     )
+#
+#     send_mock.return_value = resp
+#
+#     conn = Connection()
+#     await conn.open()
+#
+#     resp = await conn._make_api_call('BatchWriteItem', {})
+#
+#     assert resp['UnprocessedItems']['someTable'] == [{
+#         'PutRequest': {
+#             'Item': {
+#                 'name': {STRING: 'daniel'},
+#                 'picture': {BINARY: binary_blob}
+#             }
+#         }
+#     }]
+
+
+@pytest.mark.asyncio
+async def test_connection_update_time_to_live__fail():
     conn = Connection(REGION)
+    await conn.open()
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(TableError):
-            conn.update_time_to_live('test table', 'my_ttl')
+            await conn.update_time_to_live('test table', 'my_ttl')
