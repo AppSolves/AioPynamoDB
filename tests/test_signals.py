@@ -33,7 +33,6 @@ async def test_signal(mock_uuid, mock_req):
         mock_uuid.uuid4.return_value = UUID
         mock_req.return_value = {'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'}}
         c = Connection()
-        await c.open()
         await c.dispatch('CreateTable', {'TableName': 'MyTable'})
         assert ('CreateTable', 'MyTable', UUID) == pre_recorded[0]
         assert ('CreateTable', 'MyTable', UUID) == post_recorded[0]
@@ -61,7 +60,6 @@ async def test_signal_exception_pre_signal(mock_uuid, mock_req):
         mock_uuid.uuid4.return_value = UUID
         mock_req.return_value = {'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'}}
         c = Connection()
-        await c.open()
         await c.dispatch('CreateTable', {'TableName': 'MyTable'})
         assert ('CreateTable', 'MyTable', UUID) == post_recorded[0]
     finally:
@@ -88,7 +86,6 @@ async def test_signal_exception_post_signal(mock_uuid, mock_req):
         mock_uuid.uuid4.return_value = UUID
         mock_req.return_value = {'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'}}
         c = Connection()
-        await c.open()
         await c.dispatch('CreateTable', {'TableName': 'MyTable'})
         assert ('CreateTable', 'MyTable', UUID) == pre_recorded[0]
     finally:

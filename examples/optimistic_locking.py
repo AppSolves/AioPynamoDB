@@ -1,9 +1,10 @@
-from contextlib import contextmanager
+import asyncio
 from uuid import uuid4
+
 from botocore.client import ClientError
 
-from aiopynamodb.connection import Connection
 from aiopynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute, VersionAttribute
+from aiopynamodb.connection import Connection
 from aiopynamodb.exceptions import PutError, UpdateError, TransactWriteError, DeleteError, DoesNotExist
 from aiopynamodb.models import Model
 from aiopynamodb.transactions import TransactWrite
@@ -23,18 +24,18 @@ class Office(Model):
         write_capacity_units = 1
         table_name = 'Office'
         host = "http://localhost:8000"
+
     office_id = UnicodeAttribute(hash_key=True)
     employees = ListAttribute(of=OfficeEmployeeMap)
     name = UnicodeAttribute()
     version = VersionAttribute()
 
 
-if not Office.exists():
-    Office.create_table(wait=True)
+from contextlib import asynccontextmanager
 
 
-@contextmanager
-def assert_condition_check_fails():
+@asynccontextmanager
+async def assert_condition_check_fails():
     try:
         yield
     except (PutError, UpdateError, DeleteError) as e:
@@ -49,90 +50,98 @@ def assert_condition_check_fails():
         raise AssertionError("The version attribute conditional check should have failed.")
 
 
-justin = OfficeEmployeeMap(office_employee_id=str(uuid4()), person='justin')
-garrett = OfficeEmployeeMap(office_employee_id=str(uuid4()), person='garrett')
-office = Office(office_id=str(uuid4()), name="office 3", employees=[justin, garrett])
-office.save()
-assert office.version == 1
+async def main():
+    if not await Office.exists():
+        await Office.create_table(wait=True)
 
-# Get a second local copy of Office
-office_out_of_date = Office.get(office.office_id)
-# Add another employee and save the changes.
-office.employees.append(OfficeEmployeeMap(office_employee_id=str(uuid4()), person='lita'))
-office.save()
-# After a successful save or update operation the version is set or incremented locally so there's no need to refresh
-# between operations using the same local copy.
-assert office.version == 2
-assert office_out_of_date.version == 1
+    justin = OfficeEmployeeMap(office_employee_id=str(uuid4()), person='justin')
+    garrett = OfficeEmployeeMap(office_employee_id=str(uuid4()), person='garrett')
+    office = Office(office_id=str(uuid4()), name="office 3", employees=[justin, garrett])
+    await office.save()
+    assert office.version == 1
 
-# Condition check fails for update.
-with assert_condition_check_fails():
-    office_out_of_date.update(actions=[Office.name.set('new office name')])
+    # Get a second local copy of Office
+    office_out_of_date = await Office.get(office.office_id)
+    # Add another employee and save the changes.
+    office.employees.append(OfficeEmployeeMap(office_employee_id=str(uuid4()), person='lita'))
+    await office.save()
+    # After a successful save or update operation the version is set or incremented locally so there's no need to refresh
+    # between operations using the same local copy.
+    assert office.version == 2
+    assert office_out_of_date.version == 1
 
-# Condition check fails for save.
-office_out_of_date.employees.remove(garrett)
-with assert_condition_check_fails():
-    office_out_of_date.save()
+    # Condition check fails for update.
+    async with assert_condition_check_fails():
+        await office_out_of_date.update(actions=[Office.name.set('new office name')])
 
-# After refreshing the local copy the operation will succeed.
-office_out_of_date.refresh()
-office_out_of_date.employees.remove(garrett)
-office_out_of_date.save()
-assert office_out_of_date.version == 3
+    # Condition check fails for save.
+    office_out_of_date.employees.remove(garrett)
+    async with assert_condition_check_fails():
+        await office_out_of_date.save()
 
-# Condition check fails for delete.
-with assert_condition_check_fails():
-    office.delete()
+    # After refreshing the local copy the operation will succeed.
+    await office_out_of_date.refresh()
+    office_out_of_date.employees.remove(garrett)
+    await office_out_of_date.save()
+    assert office_out_of_date.version == 3
 
-# Example failed transactions.
-connection = Connection(host='http://localhost:8000')
+    # Condition check fails for delete.
+    async with assert_condition_check_fails():
+        await office.delete()
 
-with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
-    transaction.save(Office(office.office_id, name='newer name', employees=[]))
+    # Example failed transactions.
+    connection = Connection(host='http://localhost:8000')
 
-with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
-    transaction.update(
-        Office(office.office_id, name='newer name', employees=[]),
-        actions=[
-            Office.name.set('Newer Office Name'),
-        ]
-    )
+    async with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
+        transaction.save(Office(office.office_id, name='newer name', employees=[]))
 
-with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
-    transaction.delete(Office(office.office_id, name='newer name', employees=[]))
+    async with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
+        transaction.update(
+            Office(office.office_id, name='newer name', employees=[]),
+            actions=[
+                Office.name.set('Newer Office Name'),
+            ]
+        )
 
-# Example successful transaction.
-office2 = Office(office_id=str(uuid4()), name="second office", employees=[justin])
-office2.save()
-assert office2.version == 1
-office3 = Office(office_id=str(uuid4()), name="third office", employees=[garrett])
-office3.save()
-assert office3.version == 1
+    async with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
+        transaction.delete(Office(office.office_id, name='newer name', employees=[]))
 
-with TransactWrite(connection=connection) as transaction:
-    transaction.condition_check(Office, office.office_id, condition=(Office.name.exists()))
-    transaction.delete(office2)
-    transaction.save(Office(office_id=str(uuid4()), name="new office", employees=[justin, garrett]))
-    transaction.update(
-        office3,
-        actions=[
-            Office.name.set('birdistheword'),
-        ]
-    )
+    # Example successful transaction.
+    office2 = Office(office_id=str(uuid4()), name="second office", employees=[justin])
+    await office2.save()
+    assert office2.version == 1
+    office3 = Office(office_id=str(uuid4()), name="third office", employees=[garrett])
+    await office3.save()
+    assert office3.version == 1
 
-try:
-    office2.refresh()
-except DoesNotExist:
-    pass
-else:
-    raise AssertionError(
-        "This item should have been deleted, but no DoesNotExist "
-        "exception was raised when attempting to refresh a local copy."
-    )
+    async with TransactWrite(connection=connection) as transaction:
+        transaction.condition_check(Office, office.office_id, condition=(Office.name.exists()))
+        transaction.delete(office2)
+        transaction.save(Office(office_id=str(uuid4()), name="new office", employees=[justin, garrett]))
+        transaction.update(
+            office3,
+            actions=[
+                Office.name.set('birdistheword'),
+            ]
+        )
 
-assert office.version == 2
-# The version attribute of items which are saved or updated in a transaction are updated automatically to match the
-# persisted value.
-assert office3.version == 2
-office.refresh()
-assert office.version == 3
+    try:
+        await office2.refresh()
+    except DoesNotExist:
+        pass
+    else:
+        raise AssertionError(
+            "This item should have been deleted, but no DoesNotExist "
+            "exception was raised when attempting to refresh a local copy."
+        )
+
+    assert office.version == 2
+    # The version attribute of items which are saved or updated in a transaction are updated automatically to match the
+    # persisted value.
+    assert office3.version == 2
+    await office.refresh()
+    assert office.version == 3
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

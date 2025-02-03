@@ -3,21 +3,18 @@ from aiopynamodb.models import Model
 
 
 class Location(MapAttribute):
-
     lat = NumberAttribute(attr_name='latitude')
     lng = NumberAttribute(attr_name='longitude')
     name = UnicodeAttribute()
 
 
 class Person(MapAttribute):
-
     fname = UnicodeAttribute(attr_name='firstName')
     lname = UnicodeAttribute()
     age = NumberAttribute()
 
 
 class OfficeEmployeeMap(MapAttribute):
-
     office_employee_id = NumberAttribute()
     person = Person()
     office_location = Location()

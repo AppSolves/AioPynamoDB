@@ -82,10 +82,8 @@ TEST_MODELS = [
 @pytest_asyncio.fixture(scope='module')
 async def connection(ddb_url):
     conn = Connection(host=ddb_url)
-    await conn.get_client()
     yield conn
-    # Add cleanup if needed
-    # await conn.close()
+    await conn.close()
 
 
 @pytest_asyncio.fixture(scope='module', autouse=True)

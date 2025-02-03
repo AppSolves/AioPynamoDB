@@ -2,6 +2,7 @@
 Examples using DynamoDB indexes
 """
 import datetime
+import asyncio
 from aiopynamodb.models import Model
 from aiopynamodb.indexes import GlobalSecondaryIndex, AllProjection, LocalSecondaryIndex
 from aiopynamodb.attributes import UnicodeAttribute, NumberAttribute, UTCDateTimeAttribute
@@ -37,17 +38,7 @@ class TestModel(Model):
     view_index = ViewIndex()
     view = NumberAttribute(default=0)
 
-if not TestModel.exists():
-    TestModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
 
-# Create an item
-test_item = TestModel('forum-example', 'thread-example')
-test_item.view = 1
-test_item.save()
-
-# Indexes can be queried easily using the index's hash key
-for test_item in TestModel.view_index.query(1):
-    print("Item queried from index: {0}".format(test_item))
 
 
 class GamePlayerOpponentIndex(LocalSecondaryIndex):
@@ -86,17 +77,36 @@ class GameModel(Model):
     player_opponent_index = GamePlayerOpponentIndex()
     opponent_time_index = GameOpponentTimeIndex()
 
-if not GameModel.exists():
-    GameModel.create_table(wait=True)
 
-# Create an item
-item = GameModel('1234', datetime.datetime.utcnow())
-item.winner_id = '5678'
-item.save()
 
-# Indexes can be queried easily using the index's hash key
-for item in GameModel.player_opponent_index.query('1234'):
-    print("Item queried from index: {0}".format(item))
+async def main():
+    if not await TestModel.exists():
+        await TestModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
 
-# Count on an index
-print(GameModel.player_opponent_index.count('1234'))
+    # Create an item
+    test_item = TestModel('forum-example', 'thread-example')
+    test_item.view = 1
+    await test_item.save()
+
+    # Indexes can be queried easily using the index's hash key
+    async for test_item in TestModel.view_index.query(1):
+        print("Item queried from index: {0}".format(test_item))
+
+    if not await GameModel.exists():
+        await GameModel.create_table(wait=True)
+
+    # Create an item
+    item = GameModel('1234', datetime.datetime.utcnow())
+    item.winner_id = '5678'
+    await item.save()
+
+    # Indexes can be queried easily using the index's hash key
+    async for item in GameModel.player_opponent_index.query('1234'):
+        print("Item queried from index: {0}".format(item))
+
+    # Count on an index
+    print(await GameModel.player_opponent_index.count('1234'))
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

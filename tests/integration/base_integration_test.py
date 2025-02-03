@@ -21,7 +21,6 @@ async def test_connection_integration(ddb_url):
     # For use with a fake dynamodb connection
     # See: http://aws.amazon.com/dynamodb/developer-resources/
     conn = Connection(host=ddb_url)
-    await conn.open()
 
     print(conn)
     print("conn.describe_table...")

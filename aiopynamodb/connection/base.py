@@ -1,20 +1,20 @@
 """
 Lowest level connection
 """
-import logging
 import asyncio
+import functools
+import logging
 import uuid
 from threading import local
 from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 import aiobotocore.client
 import botocore.exceptions
+from aiobotocore.session import get_session
 from botocore.client import ClientError
 from botocore.exceptions import BotoCoreError
-from aiobotocore.session import get_session
 
 from aiopynamodb.connection._botocore_private import BotocoreBaseClientPrivate
-from aiopynamodb._util import bin_decode_attr
 from aiopynamodb.constants import (
     RETURN_CONSUMED_CAPACITY_VALUES, RETURN_ITEM_COLL_METRICS_VALUES,
     RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY, RETURN_VALUES_VALUES,
@@ -26,10 +26,9 @@ from aiopynamodb.constants import (
     PUT_ITEM, SELECT, LIMIT, QUERY, SCAN, ITEM, LOCAL_SECONDARY_INDEXES,
     KEYS, KEY, SEGMENT, TOTAL_SEGMENTS, CREATE_TABLE, PROVISIONED_THROUGHPUT, READ_CAPACITY_UNITS,
     WRITE_CAPACITY_UNITS, GLOBAL_SECONDARY_INDEXES, PROJECTION, EXCLUSIVE_START_TABLE_NAME, TOTAL,
-    DELETE_TABLE, UPDATE_TABLE, LIST_TABLES, GLOBAL_SECONDARY_INDEX_UPDATES, ATTRIBUTES,
-    CONSUMED_CAPACITY, CAPACITY_UNITS, ATTRIBUTE_TYPES,
-    ITEMS, LAST_EVALUATED_KEY, RESPONSES, UNPROCESSED_KEYS,
-    UNPROCESSED_ITEMS, STREAM_SPECIFICATION, STREAM_VIEW_TYPE, STREAM_ENABLED,
+    DELETE_TABLE, UPDATE_TABLE, LIST_TABLES, GLOBAL_SECONDARY_INDEX_UPDATES, CONSUMED_CAPACITY, CAPACITY_UNITS,
+    ATTRIBUTE_TYPES,
+    STREAM_SPECIFICATION, STREAM_VIEW_TYPE, STREAM_ENABLED,
     EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES,
     CONDITION_EXPRESSION, FILTER_EXPRESSION,
     TRANSACT_WRITE_ITEMS, TRANSACT_GET_ITEMS, CLIENT_REQUEST_TOKEN, TRANSACT_ITEMS, TRANSACT_CONDITION_CHECK,
@@ -56,6 +55,15 @@ RATE_LIMITING_ERROR_CODES = ['ProvisionedThroughputExceededException', 'Throttli
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
+
+
+def async_property(func):
+    @property
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 class MetaTable(object):
@@ -294,20 +302,14 @@ class Connection(object):
         self._aws_session_token = aws_session_token
 
     def __repr__(self) -> str:
-        return "Connection<{}>".format(self.client.meta.endpoint_url)
-
-    async def open(self):
-        """
-
-        """
-        await self.get_client()
-
+        return f"Connection<{self.host}>"
 
     async def dispatch(self, operation_name: str, operation_kwargs: Dict) -> Dict:
         """
         Dispatches `operation_name` with arguments `operation_kwargs`
         """
-        if operation_name not in [DESCRIBE_TABLE, LIST_TABLES, UPDATE_TABLE, UPDATE_TIME_TO_LIVE, DELETE_TABLE, CREATE_TABLE]:
+        if operation_name not in [DESCRIBE_TABLE, LIST_TABLES, UPDATE_TABLE, UPDATE_TIME_TO_LIVE, DELETE_TABLE,
+                                  CREATE_TABLE]:
             if RETURN_CONSUMED_CAPACITY not in operation_kwargs:
                 operation_kwargs.update(self.get_consumed_capacity_map(TOTAL))
         log.debug("Calling %s with arguments %s", operation_name, operation_kwargs)
@@ -343,9 +345,10 @@ class Connection(object):
             request.headers.update(self._extra_headers)
 
     async def _make_api_call(self, operation_name: str, operation_kwargs: Dict) -> Dict:
-        await self.open()
         try:
-            return await self._client._make_api_call(operation_name, operation_kwargs)
+            client = await self.client
+            # async with client as client:
+            return await client._make_api_call(operation_name, operation_kwargs)
         except ClientError as e:
             resp_metadata = e.response.get('ResponseMetadata', {}).get('HTTPHeaders', {})
             cancellation_reasons = e.response.get('CancellationReasons', [])
@@ -383,38 +386,54 @@ class Connection(object):
             return ",".join(table_names)
         return operation_kwargs.get(TABLE_NAME)
 
+    # @property
+    # def session(self) -> aiobotocore.session.AioSession:
+    #     """
+    #     Returns a valid botocore session
+    #     """
+    #     # botocore client creation is not thread safe as of v1.2.5+ (see issue #153)
+    #     if getattr(self._local, 'session', None) is None:
+    #         self._local.session = get_session()
+    #         if self._aws_access_key_id and self._aws_secret_access_key:
+    #             self._local.session.set_credentials(self._aws_access_key_id,
+    #                                                 self._aws_secret_access_key,
+    #                                                 self._aws_session_token)
+    #     return self._local.session
+
+    # @property
+    # def client(self) -> BotocoreBaseClientPrivate:
+    #     """
+    #     Returns a botocore dynamodb client
+    #     """
+    #     return self._client
+
     @property
     def session(self) -> aiobotocore.session.AioSession:
         """
-        Returns a valid botocore session
+        Returns a valid aiobotocore session
         """
-        # botocore client creation is not thread safe as of v1.2.5+ (see issue #153)
-        if getattr(self._local, 'session', None) is None:
-            self._local.session = get_session()
+        if getattr(self, '_session', None) is None:
+            self._session = get_session()
             if self._aws_access_key_id and self._aws_secret_access_key:
-                self._local.session.set_credentials(self._aws_access_key_id,
-                                                        self._aws_secret_access_key,
-                                                        self._aws_session_token)
-        return self._local.session
+                self._session.set_credentials(
+                    self._aws_access_key_id,
+                    self._aws_secret_access_key,
+                    self._aws_session_token
+                )
+        return self._session
 
-    @property
-    def client(self) -> BotocoreBaseClientPrivate:
+    @async_property
+    async def client(self) -> BotocoreBaseClientPrivate:
         """
-        Returns a botocore dynamodb client
+        Returns a aiobotocore dynamodb client
         """
-        return self._client
-
-    async def get_client(self) -> aiobotocore.client.AioBaseClient:
         current_loop = asyncio.get_event_loop()
-
-        # Close existing client if it's from a different loop
         if self._client is not None and self._client_loop is not current_loop:
             await self._client.close()
             self._client = None
             self._client_loop = None
             print('closed client')
-
-        if self._client is None:
+        if not self._client or (self._client._request_signer and not self._client._request_signer._credentials):
             config = botocore.client.Config(
                 parameter_validation=False,
                 connect_timeout=self._connect_timeout_seconds,
@@ -425,16 +444,7 @@ class Connection(object):
                     'mode': 'standard',
                 }
             )
-            # Set credentials if provided
-            session = get_session()
-            if self._aws_access_key_id and self._aws_secret_access_key:
-                session.set_credentials(
-                    self._aws_access_key_id,
-                    self._aws_secret_access_key,
-                    self._aws_session_token
-                )
-            # Create new client context
-            client_context = session.create_client(
+            client_context = self.session.create_client(
                 service_name=SERVICE_NAME,
                 region_name=self.region,
                 endpoint_url=self.host,
@@ -447,13 +457,55 @@ class Connection(object):
 
         return self._client
 
+    # async def get_client(self) -> aiobotocore.client.AioBaseClient:
+    #     current_loop = asyncio.get_event_loop()
+    #
+    #     # Close existing client if it's from a different loop
+    #     if self._client is not None and self._client_loop is not current_loop:
+    #         await self._client.close()
+    #         self._client = None
+    #         self._client_loop = None
+    #         print('closed client')
+    #
+    #     if self._client is None:
+    #         config = botocore.client.Config(
+    #             parameter_validation=False,
+    #             connect_timeout=self._connect_timeout_seconds,
+    #             read_timeout=self._read_timeout_seconds,
+    #             max_pool_connections=self._max_pool_connections,
+    #             retries={
+    #                 'total_max_attempts': 1 + self._max_retry_attempts_exception,
+    #                 'mode': 'standard',
+    #             }
+    #         )
+    #         # Set credentials if provided
+    #         session = get_session()
+    #         if self._aws_access_key_id and self._aws_secret_access_key:
+    #             session.set_credentials(
+    #                 self._aws_access_key_id,
+    #                 self._aws_secret_access_key,
+    #                 self._aws_session_token
+    #             )
+    #         # Create new client context
+    #         client_context = session.create_client(
+    #             service_name=SERVICE_NAME,
+    #             region_name=self.region,
+    #             endpoint_url=self.host,
+    #             config=config,
+    #         )
+    #         # Async enter to get the client
+    #         self._client = await client_context.__aenter__()
+    #         self._client.meta.events.register_first('before-send.*.*', self._before_send)
+    #         self._client_loop = current_loop
+    #
+    #     return self._client
+
     async def close(self):
         """Close the client if it exists."""
         if self._client:
             await self._client.close()
             self._client = None
             self._client_loop = None
-
 
     def add_meta_table(self, meta_table: MetaTable) -> None:
         """
@@ -473,17 +525,17 @@ class Connection(object):
             raise TableError(f"Meta-table for '{table_name}' not initialized") from None
 
     async def create_table(
-        self,
-        table_name: str,
-        attribute_definitions: Optional[Any] = None,
-        key_schema: Optional[Any] = None,
-        read_capacity_units: Optional[int] = None,
-        write_capacity_units: Optional[int] = None,
-        global_secondary_indexes: Optional[Any] = None,
-        local_secondary_indexes: Optional[Any] = None,
-        stream_specification: Optional[Dict] = None,
-        billing_mode: str = DEFAULT_BILLING_MODE,
-        tags: Optional[Dict[str, str]] = None,
+            self,
+            table_name: str,
+            attribute_definitions: Optional[Any] = None,
+            key_schema: Optional[Any] = None,
+            read_capacity_units: Optional[int] = None,
+            write_capacity_units: Optional[int] = None,
+            global_secondary_indexes: Optional[Any] = None,
+            local_secondary_indexes: Optional[Any] = None,
+            stream_specification: Optional[Dict] = None,
+            billing_mode: str = DEFAULT_BILLING_MODE,
+            tags: Optional[Dict[str, str]] = None,
     ) -> Dict:
         """
         Performs the CreateTable operation
@@ -597,11 +649,11 @@ class Connection(object):
         return data
 
     async def update_table(
-        self,
-        table_name: str,
-        read_capacity_units: Optional[int] = None,
-        write_capacity_units: Optional[int] = None,
-        global_secondary_index_updates: Optional[Any] = None,
+            self,
+            table_name: str,
+            read_capacity_units: Optional[int] = None,
+            write_capacity_units: Optional[int] = None,
+            global_secondary_index_updates: Optional[Any] = None,
     ) -> Dict:
         """
         Performs the UpdateTable operation
@@ -635,9 +687,9 @@ class Connection(object):
             raise TableError("Failed to update table: {}".format(e), e)
 
     async def list_tables(
-        self,
-        exclusive_start_table_name: Optional[str] = None,
-        limit: Optional[int] = None,
+            self,
+            exclusive_start_table_name: Optional[str] = None,
+            limit: Optional[int] = None,
     ) -> Dict:
         """
         Performs the ListTables operation
@@ -682,11 +734,11 @@ class Connection(object):
                 raise
 
     def get_item_attribute_map(
-        self,
-        table_name: str,
-        attributes: Any,
-        item_key: str = ITEM,
-        pythonic_key: bool = True,
+            self,
+            table_name: str,
+            attributes: Any,
+            item_key: str = ITEM,
+            pythonic_key: bool = True,
     ) -> Dict:
         """
         Builds up a dynamodb compatible AttributeValue map
@@ -700,9 +752,9 @@ class Connection(object):
             pythonic_key=pythonic_key)
 
     def parse_attribute(
-        self,
-        attribute: Any,
-        return_type: bool = False
+            self,
+            attribute: Any,
+            return_type: bool = False
     ) -> Any:
         """
         Returns the attribute value, where the attribute can be
@@ -722,10 +774,10 @@ class Connection(object):
             return attribute
 
     def get_attribute_type(
-        self,
-        table_name: str,
-        attribute_name: str,
-        value: Optional[Any] = None
+            self,
+            table_name: str,
+            attribute_name: str,
+            value: Optional[Any] = None
     ) -> str:
         """
         Returns the proper attribute type for a given attribute name
@@ -737,11 +789,11 @@ class Connection(object):
         return tbl.get_attribute_type(attribute_name, value=value)
 
     def get_identifier_map(
-        self,
-        table_name: str,
-        hash_key: str,
-        range_key: Optional[str] = None,
-        key: str = KEY
+            self,
+            table_name: str,
+            hash_key: str,
+            range_key: Optional[str] = None,
+            key: str = KEY
     ) -> Dict:
         """
         Builds the identifier map that is common to several operations
@@ -772,8 +824,8 @@ class Connection(object):
         }
 
     def get_return_values_on_condition_failure_map(
-        self,
-        return_values_on_condition_failure: str
+            self,
+            return_values_on_condition_failure: str
     ) -> Dict:
         """
         Builds the return values map that is common to several operations
@@ -807,25 +859,25 @@ class Connection(object):
         return tbl.get_exclusive_start_key_map(exclusive_start_key)
 
     def get_operation_kwargs(
-        self,
-        table_name: str,
-        hash_key: str,
-        range_key: Optional[str] = None,
-        key: str = KEY,
-        attributes: Optional[Any] = None,
-        attributes_to_get: Optional[Any] = None,
-        actions: Optional[Sequence[Action]] = None,
-        condition: Optional[Condition] = None,
-        consistent_read: Optional[bool] = None,
-        return_values: Optional[str] = None,
-        return_consumed_capacity: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None,
-        return_values_on_condition_failure: Optional[str] = None
+            self,
+            table_name: str,
+            hash_key: str,
+            range_key: Optional[str] = None,
+            key: str = KEY,
+            attributes: Optional[Any] = None,
+            attributes_to_get: Optional[Any] = None,
+            actions: Optional[Sequence[Action]] = None,
+            condition: Optional[Condition] = None,
+            consistent_read: Optional[bool] = None,
+            return_values: Optional[str] = None,
+            return_consumed_capacity: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None,
+            return_values_on_condition_failure: Optional[str] = None
     ) -> Dict:
         self._check_condition('condition', condition)
 
         operation_kwargs: Dict[str, Any] = {}
-        name_placeholders: Dict[str, str]  = {}
+        name_placeholders: Dict[str, str] = {}
         expression_attribute_values: Dict[str, Any] = {}
 
         operation_kwargs[TABLE_NAME] = table_name
@@ -862,14 +914,14 @@ class Connection(object):
         return operation_kwargs
 
     async def delete_item(
-        self,
-        table_name: str,
-        hash_key: str,
-        range_key: Optional[str] = None,
-        condition: Optional[Condition] = None,
-        return_values: Optional[str] = None,
-        return_consumed_capacity: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None,
+            self,
+            table_name: str,
+            hash_key: str,
+            range_key: Optional[str] = None,
+            condition: Optional[Condition] = None,
+            return_values: Optional[str] = None,
+            return_consumed_capacity: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         """
         Performs the DeleteItem operation and returns the result
@@ -889,15 +941,15 @@ class Connection(object):
             raise DeleteError("Failed to delete item: {}".format(e), e)
 
     async def update_item(
-        self,
-        table_name: str,
-        hash_key: str,
-        range_key: Optional[str] = None,
-        actions: Optional[Sequence[Action]] = None,
-        condition: Optional[Condition] = None,
-        return_consumed_capacity: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None,
-        return_values: Optional[str] = None,
+            self,
+            table_name: str,
+            hash_key: str,
+            range_key: Optional[str] = None,
+            actions: Optional[Sequence[Action]] = None,
+            condition: Optional[Condition] = None,
+            return_consumed_capacity: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None,
+            return_values: Optional[str] = None,
     ) -> Dict:
         """
         Performs the UpdateItem operation
@@ -921,15 +973,15 @@ class Connection(object):
             raise UpdateError("Failed to update item: {}".format(e), e)
 
     async def put_item(
-        self,
-        table_name: str,
-        hash_key: str,
-        range_key: Optional[str] = None,
-        attributes: Optional[Any] = None,
-        condition: Optional[Condition] = None,
-        return_values: Optional[str] = None,
-        return_consumed_capacity: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None,
+            self,
+            table_name: str,
+            hash_key: str,
+            range_key: Optional[str] = None,
+            attributes: Optional[Any] = None,
+            condition: Optional[Condition] = None,
+            return_values: Optional[str] = None,
+            return_consumed_capacity: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         """
         Performs the PutItem operation and returns the result
@@ -951,10 +1003,10 @@ class Connection(object):
             raise PutError("Failed to put item: {}".format(e), e)
 
     def _get_transact_operation_kwargs(
-        self,
-        client_request_token: Optional[str] = None,
-        return_consumed_capacity: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None
+            self,
+            client_request_token: Optional[str] = None,
+            return_consumed_capacity: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None
     ) -> Dict:
         operation_kwargs = {}
         if client_request_token is not None:
@@ -967,14 +1019,14 @@ class Connection(object):
         return operation_kwargs
 
     async def transact_write_items(
-        self,
-        condition_check_items: Sequence[Dict],
-        delete_items: Sequence[Dict],
-        put_items: Sequence[Dict],
-        update_items: Sequence[Dict],
-        client_request_token: Optional[str] = None,
-        return_consumed_capacity: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None,
+            self,
+            condition_check_items: Sequence[Dict],
+            delete_items: Sequence[Dict],
+            put_items: Sequence[Dict],
+            update_items: Sequence[Dict],
+            client_request_token: Optional[str] = None,
+            return_consumed_capacity: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         """
         Performs the TransactWrite operation and returns the result
@@ -1006,9 +1058,9 @@ class Connection(object):
             raise TransactWriteError("Failed to write transaction items", e)
 
     async def transact_get_items(
-        self,
-        get_items: Sequence[Dict],
-        return_consumed_capacity: Optional[str] = None,
+            self,
+            get_items: Sequence[Dict],
+            return_consumed_capacity: Optional[str] = None,
     ) -> Dict:
         """
         Performs the TransactGet operation and returns the result
@@ -1024,12 +1076,12 @@ class Connection(object):
             raise TransactGetError("Failed to get transaction items", e)
 
     async def batch_write_item(
-        self,
-        table_name: str,
-        put_items: Optional[Any] = None,
-        delete_items: Optional[Any] = None,
-        return_consumed_capacity: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None,
+            self,
+            table_name: str,
+            put_items: Optional[Any] = None,
+            delete_items: Optional[Any] = None,
+            return_consumed_capacity: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         """
         Performs the batch_write_item operation
@@ -1064,12 +1116,12 @@ class Connection(object):
             raise PutError("Failed to batch write items: {}".format(e), e)
 
     async def batch_get_item(
-        self,
-        table_name: str,
-        keys: Sequence[str],
-        consistent_read: Optional[bool] = None,
-        return_consumed_capacity: Optional[str] = None,
-        attributes_to_get: Optional[Any] = None,
+            self,
+            table_name: str,
+            keys: Sequence[str],
+            consistent_read: Optional[bool] = None,
+            return_consumed_capacity: Optional[str] = None,
+            attributes_to_get: Optional[Any] = None,
     ) -> Dict:
         """
         Performs the batch get item operation
@@ -1105,12 +1157,12 @@ class Connection(object):
             raise GetError("Failed to batch get items: {}".format(e), e)
 
     async def get_item(
-        self,
-        table_name: str,
-        hash_key: str,
-        range_key: Optional[str] = None,
-        consistent_read: bool = False,
-        attributes_to_get: Optional[Any] = None,
+            self,
+            table_name: str,
+            hash_key: str,
+            range_key: Optional[str] = None,
+            consistent_read: bool = False,
+            attributes_to_get: Optional[Any] = None,
     ) -> Dict:
         """
         Performs the GetItem operation and returns the result
@@ -1128,17 +1180,17 @@ class Connection(object):
             raise GetError("Failed to get item: {}".format(e), e)
 
     async def scan(
-        self,
-        table_name: str,
-        filter_condition: Optional[Any] = None,
-        attributes_to_get: Optional[Any] = None,
-        limit: Optional[int] = None,
-        return_consumed_capacity: Optional[str] = None,
-        exclusive_start_key: Optional[str] = None,
-        segment: Optional[int] = None,
-        total_segments: Optional[int] = None,
-        consistent_read: Optional[bool] = None,
-        index_name: Optional[str] = None,
+            self,
+            table_name: str,
+            filter_condition: Optional[Any] = None,
+            attributes_to_get: Optional[Any] = None,
+            limit: Optional[int] = None,
+            return_consumed_capacity: Optional[str] = None,
+            exclusive_start_key: Optional[str] = None,
+            segment: Optional[int] = None,
+            total_segments: Optional[int] = None,
+            consistent_read: Optional[bool] = None,
+            index_name: Optional[str] = None,
     ) -> Dict:
         """
         Performs the scan operation
@@ -1180,19 +1232,19 @@ class Connection(object):
             raise ScanError("Failed to scan table: {}".format(e), e)
 
     async def query(
-        self,
-        table_name: str,
-        hash_key: str,
-        range_key_condition: Optional[Condition] = None,
-        filter_condition: Optional[Any] = None,
-        attributes_to_get: Optional[Any] = None,
-        consistent_read: bool = False,
-        exclusive_start_key: Optional[Any] = None,
-        index_name: Optional[str] = None,
-        limit: Optional[int] = None,
-        return_consumed_capacity: Optional[str] = None,
-        scan_index_forward: Optional[bool] = None,
-        select: Optional[str] = None,
+            self,
+            table_name: str,
+            hash_key: str,
+            range_key_condition: Optional[Condition] = None,
+            filter_condition: Optional[Any] = None,
+            attributes_to_get: Optional[Any] = None,
+            consistent_read: bool = False,
+            exclusive_start_key: Optional[Any] = None,
+            index_name: Optional[str] = None,
+            limit: Optional[int] = None,
+            return_consumed_capacity: Optional[str] = None,
+            scan_index_forward: Optional[bool] = None,
+            select: Optional[str] = None,
     ) -> Dict:
         """
         Performs the Query operation and returns the result
@@ -1214,7 +1266,8 @@ class Connection(object):
         else:
             hash_keyname = tbl.hash_keyname
 
-        hash_condition_value = {self.get_attribute_type(table_name, hash_keyname, hash_key): self.parse_attribute(hash_key)}
+        hash_condition_value = {
+            self.get_attribute_type(table_name, hash_keyname, hash_key): self.parse_attribute(hash_key)}
         key_condition = Path([hash_keyname]) == hash_condition_value
         if range_key_condition is not None:
             key_condition &= range_key_condition

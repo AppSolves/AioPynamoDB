@@ -3,6 +3,7 @@ import io
 import logging
 import zlib
 from datetime import datetime
+import asyncio
 
 import urllib3
 
@@ -16,6 +17,7 @@ def register_benchmark(testname):
     def _wrap(func):
         benchmark_registry[testname] = func
         return func
+
     return _wrap
 
 
@@ -24,22 +26,31 @@ def results_new_benchmark(name: str) -> None:
     print(name)
 
 
-def results_record_result(callback, count):
+async def results_record_result(callback, count):
     callback_name = callback.__name__
     bench_name = callback_name.split('_', 1)[-1]
     try:
-        results = timeit.repeat(
-            f"{callback_name}()",
-            setup=f"from __main__ import patch_urllib3, {callback_name}; patch_urllib3()",
-            repeat=10,
-            number=count,
-        )
+        # Create a wrapped version of the async function that runs the loop
+        async def run_benchmark():
+            tasks = []
+            for _ in range(count):
+                tasks.append(callback())
+            await asyncio.gather(*tasks)
+
+        # Time multiple runs of the async function
+        results = []
+        for _ in range(10):  # Similar to original repeat=10
+            start_time = timeit.default_timer()
+            await run_benchmark()
+            end_time = timeit.default_timer()
+            results.append(end_time - start_time)
+
     except Exception:
         logging.exception(f"error running {bench_name}")
         return
+
     result = count / min(results)
     benchmark_results.append((bench_name, str(result)))
-
     print(f"{bench_name}: {result:,.02f} calls/sec")
 
 
@@ -47,7 +58,7 @@ def results_record_result(callback, count):
 # Monkeypatching
 # =============================================================================
 
-def mock_urlopen(self, method, url, body, headers, **kwargs):
+async def mock_urlopen(self, method, url, body, headers, **kwargs):
     target = headers.get('X-Amz-Target')
     if target.endswith(b'DescribeTable'):
         body = """{
@@ -71,7 +82,6 @@ def mock_urlopen(self, method, url, body, headers, **kwargs):
         }
         """
     elif target.endswith(b'GetItem'):
-        # TODO: sometimes raise exc
         body = """{
             "Item": {
                 "user_name": {"S": "some_user"},
@@ -122,8 +132,6 @@ def mock_urlopen(self, method, url, body, headers, **kwargs):
         "x-amz-requestid": "YB5DURFL1EQ6ULM39GSEEHFTYTPBBUXDJSYPFZPR4EL7M3AYV0RS",
     }
 
-    # TODO: consumed capacity?
-
     body = io.BytesIO(body_bytes)
     resp = urllib3.HTTPResponse(
         body,
@@ -147,7 +155,6 @@ import os
 from aiopynamodb.models import Model
 from aiopynamodb.attributes import UnicodeAttribute, BooleanAttribute, MapAttribute, UTCDateTimeAttribute
 
-
 os.environ["AWS_ACCESS_KEY_ID"] = "1"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "1"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
@@ -162,7 +169,9 @@ class UserPreferences(MapAttribute):
 class UserModel(Model):
     class Meta:
         table_name = 'User'
-        max_retry_attempts = 0  # TODO: do this conditionally. need to replace the connection object
+        max_retry_attempts = 0
+        host = 'http://localhost:8000'
+
     user_name = UnicodeAttribute(hash_key=True)
     first_name = UnicodeAttribute()
     last_name = UnicodeAttribute()
@@ -178,8 +187,8 @@ class UserModel(Model):
 # =============================================================================
 
 @register_benchmark("get_item")
-def bench_get_item():
-    UserModel.get("username")
+async def bench_get_item():
+    await UserModel.get("username")
 
 
 # =============================================================================
@@ -187,8 +196,8 @@ def bench_get_item():
 # =============================================================================
 
 @register_benchmark("put_item")
-def bench_put_item():
-    UserModel(
+async def bench_put_item():
+    user = UserModel(
         "username",
         email="some_user@gmail.com",
         first_name="John",
@@ -201,22 +210,23 @@ def bench_put_item():
             date_of_birth=datetime.utcnow(),
         ),
         last_login=datetime.utcnow(),
-    ).save()
+    )
+    await user.save()
 
 
 # =============================================================================
-# Benchmarks.
+# Benchmarks
 # =============================================================================
 
-def main():
+async def main():
     results_new_benchmark("Basic operations")
 
-    results_record_result(benchmark_registry["get_item"], COUNT)
-    results_record_result(benchmark_registry["put_item"], COUNT)
+    await results_record_result(benchmark_registry["get_item"], COUNT)
+    await results_record_result(benchmark_registry["put_item"], COUNT)
 
     print()
     print("Above metrics are in call/sec, larger is better.")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
