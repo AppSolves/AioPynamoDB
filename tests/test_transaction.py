@@ -1,14 +1,11 @@
 import pytest
-from aiopynamodb.attributes import NumberAttribute, UnicodeAttribute, VersionAttribute
 
+from aiopynamodb.attributes import NumberAttribute, UnicodeAttribute, VersionAttribute
 from aiopynamodb.connection import Connection
 from aiopynamodb.connection.base import MetaTable
 from aiopynamodb.constants import TABLE_KEY
-from aiopynamodb.transactions import Transaction, TransactGet, TransactWrite
 from aiopynamodb.models import Model
-from tests.test_base_connection import PATCH_METHOD
-
-from unittest.mock import patch
+from aiopynamodb.transactions import Transaction, TransactGet, TransactWrite
 
 
 class MockModel(Model):
