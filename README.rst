@@ -9,9 +9,7 @@ Basic functionality is working, help to improve it is welcome.
 
 
 ** Known Issues **
- - Users may encounter "Unclosed client session" messages. This is a known issue as client sessions are not properly closed yet. Please be aware of this when using the library.
  - Python type hints needs migration. MyPy testing implementation is pending and contributions in this area are welcome.
- - Help is needed to complete the migration of test files (e.g., test_base_connection.py)
 
 Installation
 ============

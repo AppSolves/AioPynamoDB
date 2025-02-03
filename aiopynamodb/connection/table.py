@@ -2,7 +2,6 @@
 PynamoDB Connection classes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-
 from typing import Any, Dict, Mapping, Optional, Sequence
 
 from aiopynamodb.connection.base import Connection, MetaTable

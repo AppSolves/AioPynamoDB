@@ -266,6 +266,7 @@ class Connection(object):
         self._local = local()
         self._client: Optional[BotocoreBaseClientPrivate] = None
         self._client_loop: Optional[asyncio.AbstractEventLoop] = None
+        self.client_context = None
         self._convert_to_request_dict__endpoint_url = False
         if region:
             self.region = region
@@ -303,6 +304,12 @@ class Connection(object):
 
     def __repr__(self) -> str:
         return f"Connection<{self.host}>"
+
+    def __del__(self):
+        try:
+            asyncio.run(self.close())
+        except Exception as e:
+            pass
 
     async def dispatch(self, operation_name: str, operation_kwargs: Dict) -> Dict:
         """
@@ -347,7 +354,6 @@ class Connection(object):
     async def _make_api_call(self, operation_name: str, operation_kwargs: Dict) -> Dict:
         try:
             client = await self.client
-            # async with client as client:
             return await client._make_api_call(operation_name, operation_kwargs)
         except ClientError as e:
             resp_metadata = e.response.get('ResponseMetadata', {}).get('HTTPHeaders', {})
@@ -386,27 +392,6 @@ class Connection(object):
             return ",".join(table_names)
         return operation_kwargs.get(TABLE_NAME)
 
-    # @property
-    # def session(self) -> aiobotocore.session.AioSession:
-    #     """
-    #     Returns a valid botocore session
-    #     """
-    #     # botocore client creation is not thread safe as of v1.2.5+ (see issue #153)
-    #     if getattr(self._local, 'session', None) is None:
-    #         self._local.session = get_session()
-    #         if self._aws_access_key_id and self._aws_secret_access_key:
-    #             self._local.session.set_credentials(self._aws_access_key_id,
-    #                                                 self._aws_secret_access_key,
-    #                                                 self._aws_session_token)
-    #     return self._local.session
-
-    # @property
-    # def client(self) -> BotocoreBaseClientPrivate:
-    #     """
-    #     Returns a botocore dynamodb client
-    #     """
-    #     return self._client
-
     @property
     def session(self) -> aiobotocore.session.AioSession:
         """
@@ -429,10 +414,11 @@ class Connection(object):
         """
         current_loop = asyncio.get_event_loop()
         if self._client is not None and self._client_loop is not current_loop:
-            await self._client.close()
+            await self.close()
             self._client = None
             self._client_loop = None
             print('closed client')
+
         if not self._client or (self._client._request_signer and not self._client._request_signer._credentials):
             config = botocore.client.Config(
                 parameter_validation=False,
@@ -444,66 +430,24 @@ class Connection(object):
                     'mode': 'standard',
                 }
             )
-            client_context = self.session.create_client(
+            self.client_context = self.session.create_client(
                 service_name=SERVICE_NAME,
                 region_name=self.region,
                 endpoint_url=self.host,
                 config=config,
             )
             # Async enter to get the client
-            self._client = await client_context.__aenter__()
+            self._client = await self.client_context.__aenter__()
             self._client.meta.events.register_first('before-send.*.*', self._before_send)
             self._client_loop = current_loop
 
-        return self._client
 
-    # async def get_client(self) -> aiobotocore.client.AioBaseClient:
-    #     current_loop = asyncio.get_event_loop()
-    #
-    #     # Close existing client if it's from a different loop
-    #     if self._client is not None and self._client_loop is not current_loop:
-    #         await self._client.close()
-    #         self._client = None
-    #         self._client_loop = None
-    #         print('closed client')
-    #
-    #     if self._client is None:
-    #         config = botocore.client.Config(
-    #             parameter_validation=False,
-    #             connect_timeout=self._connect_timeout_seconds,
-    #             read_timeout=self._read_timeout_seconds,
-    #             max_pool_connections=self._max_pool_connections,
-    #             retries={
-    #                 'total_max_attempts': 1 + self._max_retry_attempts_exception,
-    #                 'mode': 'standard',
-    #             }
-    #         )
-    #         # Set credentials if provided
-    #         session = get_session()
-    #         if self._aws_access_key_id and self._aws_secret_access_key:
-    #             session.set_credentials(
-    #                 self._aws_access_key_id,
-    #                 self._aws_secret_access_key,
-    #                 self._aws_session_token
-    #             )
-    #         # Create new client context
-    #         client_context = session.create_client(
-    #             service_name=SERVICE_NAME,
-    #             region_name=self.region,
-    #             endpoint_url=self.host,
-    #             config=config,
-    #         )
-    #         # Async enter to get the client
-    #         self._client = await client_context.__aenter__()
-    #         self._client.meta.events.register_first('before-send.*.*', self._before_send)
-    #         self._client_loop = current_loop
-    #
-    #     return self._client
+        return self._client
 
     async def close(self):
         """Close the client if it exists."""
         if self._client:
-            await self._client.close()
+            await self.client_context.__aexit__(None, None, None)
             self._client = None
             self._client_loop = None
 

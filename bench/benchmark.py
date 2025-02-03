@@ -1,9 +1,9 @@
-import timeit
+import asyncio
 import io
 import logging
+import timeit
 import zlib
 from datetime import datetime
-import asyncio
 
 import urllib3
 
@@ -219,6 +219,9 @@ async def bench_put_item():
 # =============================================================================
 
 async def main():
+    if not await UserModel.exists():
+        await UserModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
+
     results_new_benchmark("Basic operations")
 
     await results_record_result(benchmark_registry["get_item"], COUNT)

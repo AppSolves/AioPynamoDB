@@ -83,7 +83,6 @@ TEST_MODELS = [
 async def connection(ddb_url):
     conn = Connection(host=ddb_url)
     yield conn
-    await conn.close()
 
 
 @pytest_asyncio.fixture(scope='module', autouse=True)
