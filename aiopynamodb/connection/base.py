@@ -307,12 +307,10 @@ class Connection(object):
 
     def __del__(self):
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             if loop.is_running():
                 loop.create_task(self.close())
-            else:
-                loop.run_until_complete(self.close())
-        except Exception:
+        except RuntimeError:
             pass
 
     async def dispatch(self, operation_name: str, operation_kwargs: Dict) -> Dict:
@@ -444,7 +442,6 @@ class Connection(object):
             self._client = await self.client_context.__aenter__()
             self._client.meta.events.register_first('before-send.*.*', self._before_send)
             self._client_loop = current_loop
-
 
         return self._client
 
