@@ -307,11 +307,14 @@ class Connection(object):
 
     def __del__(self):
         try:
-            loop = asyncio.get_running_loop()
-            if loop.is_running():
-                loop.create_task(self.close())
+            asyncio.run(self.close())
         except RuntimeError:
-            pass
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    loop.create_task(self.close())
+            except RuntimeError:
+                pass
 
     async def dispatch(self, operation_name: str, operation_kwargs: Dict) -> Dict:
         """
