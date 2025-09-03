@@ -33,9 +33,3 @@ jobs:
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       if: ${{ github.event_name == 'release' }}
-
-    - name: Publish to Test PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      if: ${{ github.event_name == 'workflow_dispatch' }}
-      with:
-        repository_url: https://test.pypi.org/legacy/
