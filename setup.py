@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 install_requires = [
-    'aiobotocore>=2.19.0',
+    'aiobotocore>=2.24.1',
     'typing-extensions>=4; python_version<"3.11"',
 ]
 

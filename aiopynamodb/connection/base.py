@@ -14,6 +14,7 @@ from aiobotocore.session import get_session
 from botocore.client import ClientError
 from botocore.exceptions import BotoCoreError
 
+from aiopynamodb.connection._aiobotocore_patch import _patch_aiobotocore
 from aiopynamodb.connection._botocore_private import BotocoreBaseClientPrivate
 from aiopynamodb.constants import (
     RETURN_CONSUMED_CAPACITY_VALUES, RETURN_ITEM_COLL_METRICS_VALUES,
@@ -49,6 +50,8 @@ from aiopynamodb.expressions.update import Action, Update
 from aiopynamodb.settings import get_settings_value
 from aiopynamodb.signals import pre_dynamodb_send, post_dynamodb_send
 from aiopynamodb.types import HASH, RANGE
+
+_patch_aiobotocore()
 
 BOTOCORE_EXCEPTIONS = (BotoCoreError, ClientError)
 RATE_LIMITING_ERROR_CODES = ['ProvisionedThroughputExceededException', 'ThrottlingException']
