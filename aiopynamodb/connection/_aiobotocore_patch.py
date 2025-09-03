@@ -3,6 +3,7 @@ def _patch_aiobotocore():
     from binascii import crc32
 
     import aiobotocore.endpoint
+    import aiobotocore.retries.special
     import aiobotocore.retryhandler
     from aiobotocore.endpoint import HttpxStreamingBody, StreamingBody  # type: ignore
     from aiobotocore.retryhandler import ChecksumError, logger  # type: ignore
@@ -81,5 +82,28 @@ def _patch_aiobotocore():
                 response_dict["body"] = http_response.content
         return response_dict
 
+    async def is_retryable(self, context):
+        service_name = context.operation_model.service_model.service_name
+        if service_name != self._SERVICE_NAME:
+            return False
+        if context.http_response is None:
+            return False
+        checksum = context.http_response.headers.get(self._CHECKSUM_HEADER)
+        if checksum is None:
+            return False
+        if inspect.isawaitable(context.http_response.content):
+            content = await context.http_response.content
+        else:
+            content = context.http_response.content
+        actual_crc32 = crc32(content) & 0xFFFFFFFF
+        if actual_crc32 != int(checksum):
+            logger.debug(
+                "DynamoDB crc32 checksum does not match, " "expected: %s, actual: %s",
+                checksum,
+                actual_crc32,
+            )
+            return True
+
     aiobotocore.retryhandler.AioCRC32Checker._check_response = _fixed_check_response  # type: ignore
     aiobotocore.endpoint.convert_to_response_dict = convert_to_response_dict
+    aiobotocore.retries.special.AioRetryDDBChecksumError.is_retryable = is_retryable  # type: ignore
