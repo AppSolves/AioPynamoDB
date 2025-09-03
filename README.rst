@@ -1,6 +1,6 @@
-========
+===========
 AioPynamoDB
-========
+===========
 Work in progress. Careful in production.
 
 This library is as fork of `PynamoDB <https://github.com/pynamodb/PynamoDB>`_ to add async support.
