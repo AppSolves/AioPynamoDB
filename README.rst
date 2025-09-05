@@ -17,6 +17,10 @@ From GitHub::
 
     $ pip install git+https://github.com/brunobelloni/AioPynamoDB#egg=aiopynamodb
 
+From PyPI::
+
+    $ pip install as-aiopynamodb -U
+
 Basic Usage
 ===========
 
