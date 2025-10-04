@@ -22,10 +22,11 @@ def _patch_aiobotocore():
                 self._header_name,
             )
         else:
-            if inspect.isawaitable(http_response.content):
-                data_buf = await http_response.content
+            response_content = http_response.content
+            if inspect.isawaitable(response_content):
+                data_buf = await response_content
             else:
-                data_buf = http_response.content
+                data_buf = response_content
 
             actual_crc32 = crc32(data_buf) & 0xFFFFFFFF
             if not actual_crc32 == int(expected_crc):
@@ -63,10 +64,11 @@ def _patch_aiobotocore():
             },
         }
         if response_dict["status_code"] >= 300:
-            if inspect.isawaitable(http_response.content):
-                response_dict["body"] = await http_response.content
+            response_content = http_response.content
+            if inspect.isawaitable(response_content):
+                response_dict["body"] = await response_content
             else:
-                response_dict["body"] = http_response.content
+                response_dict["body"] = response_content
         elif operation_model.has_event_stream_output:
             response_dict["body"] = http_response.raw
         elif operation_model.has_streaming_output:
@@ -76,10 +78,11 @@ def _patch_aiobotocore():
                 length = response_dict["headers"].get("content-length")
                 response_dict["body"] = StreamingBody(http_response.raw, length)
         else:
-            if inspect.isawaitable(http_response.content):
-                response_dict["body"] = await http_response.content
+            response_content = http_response.content
+            if inspect.isawaitable(response_content):
+                response_dict["body"] = await response_content
             else:
-                response_dict["body"] = http_response.content
+                response_dict["body"] = response_content
         return response_dict
 
     async def is_retryable(self, context):
@@ -91,10 +94,11 @@ def _patch_aiobotocore():
         checksum = context.http_response.headers.get(self._CHECKSUM_HEADER)
         if checksum is None:
             return False
-        if inspect.isawaitable(context.http_response.content):
-            content = await context.http_response.content
+        response_content = context.http_response.content
+        if inspect.isawaitable(response_content):
+            content = await response_content
         else:
-            content = context.http_response.content
+            content = response_content
         actual_crc32 = crc32(content) & 0xFFFFFFFF
         if actual_crc32 != int(checksum):
             logger.debug(
