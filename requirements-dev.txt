@@ -1,15 +1,15 @@
-pytest>=6
+pytest>=8
 pytest-env
 pytest-mock
 freezegun
-pytest-asyncio
+pytest-asyncio>=0.23
 
 # only used in CI
 coveralls
-mypy==1.2.0
-typing-extensions==4.5.0
+mypy>=1.10
+typing-extensions>=4
 pytest-cov
-blinker==1.6.2
+blinker>=1.6,<2.0
 
 # used for type-checking
 botocore-stubs
