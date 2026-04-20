@@ -1,5 +1,5 @@
 """
-Types used in pynamodb
+Types used in aiopynamodb
 """
 
 STRING = 'S'

@@ -42,7 +42,7 @@ try:
 except ImportError:  # pragma: no cover
     Namespace = _FakeNamespace  # type:ignore
 
-# The namespace for code signals.  If you are not PynamoDB code, do
+# The namespace for code signals.  If you are not AioPynamoDB code, do
 # not put signals in here.  Create your own namespace instead.
 _signals = Namespace()
 

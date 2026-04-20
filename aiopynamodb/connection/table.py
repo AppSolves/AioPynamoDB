@@ -1,5 +1,5 @@
 """
-PynamoDB Connection classes
+AioPynamoDB Connection classes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 from typing import Any, Dict, Mapping, Optional, Sequence

@@ -1,5 +1,5 @@
 """
-PynamoDB exceptions
+AioPynamoDB exceptions
 """
 import sys
 from dataclasses import dataclass
@@ -18,7 +18,7 @@ import botocore.exceptions
 
 class PynamoDBException(Exception):
     """
-    Base class for all PynamoDB exceptions.
+    Base class for all AioPynamoDB exceptions.
     """
 
     msg: str
@@ -139,7 +139,7 @@ class CancellationReason:
 
 class TransactWriteError(PynamoDBException):
     """
-    Raised when a :class:`~pynamodb.transactions.TransactWrite` operation fails.
+    Raised when a :class:`~aiopynamodb.transactions.TransactWrite` operation fails.
     """
 
     @property
@@ -161,7 +161,7 @@ class TransactWriteError(PynamoDBException):
 
 class TransactGetError(PynamoDBException):
     """
-    Raised when a :class:`~pynamodb.transactions.TransactGet` operation fails.
+    Raised when a :class:`~aiopynamodb.transactions.TransactGet` operation fails.
     """
     @property
     def cancellation_reasons(self) -> List[Optional[CancellationReason]]:

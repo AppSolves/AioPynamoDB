@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# PynamoDB documentation build configuration file, created by
-# sphinx-quickstart on Wed Jan 22 19:45:33 2014.
+# AioPynamoDB documentation build configuration file.
+# Originally created by sphinx-quickstart on Wed Jan 22 19:45:33 2014.
 #
 # This file is execfile()d with the current directory set to its
 # containing dir.
@@ -39,7 +39,7 @@ extensions = [
 ]
 
 # Directive for sphinx_issues
-issues_github_path = "pynamodb/pynamodb"
+issues_github_path = "brunobelloni/AioPynamoDB"
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -54,8 +54,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'PynamoDB'
-copyright = '2014, Jharrod LaFon'
+project = 'AioPynamoDB'
+copyright = '2014, Jharrod LaFon; 2025, Bruno Belloni'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -191,7 +191,7 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'PynamoDBdoc'
+htmlhelp_basename = 'AioPynamoDBdoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -211,8 +211,8 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    ('index', 'aiopynamodb.tex', 'PynamoDB Documentation',
-     'Jharrod LaFon', 'manual'),
+    ('index', 'aiopynamodb.tex', 'AioPynamoDB Documentation',
+     'Bruno Belloni', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -241,8 +241,8 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'pynamodb', 'PynamoDB Documentation',
-     ['Jharrod LaFon'], 1)
+    ('index', 'aiopynamodb', 'AioPynamoDB Documentation',
+     ['Bruno Belloni'], 1)
 ]
 
 # If true, show URL addresses after external links.
@@ -255,8 +255,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    ('index', 'PynamoDB', 'PynamoDB Documentation',
-     'Jharrod LaFon', 'PynamoDB', 'One line description of project.',
+    ('index', 'AioPynamoDB', 'AioPynamoDB Documentation',
+     'Bruno Belloni', 'AioPynamoDB', 'Async Python interface for Amazon DynamoDB.',
      'Miscellaneous'),
 ]
 

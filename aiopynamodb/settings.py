@@ -17,7 +17,7 @@ default_settings_dict = {
     'extra_headers': None,
 }
 
-OVERRIDE_SETTINGS_PATH = getenv('PYNAMODB_CONFIG', '/etc/pynamodb/global_default_settings.py')
+OVERRIDE_SETTINGS_PATH = getenv('AIOPYNAMODB_CONFIG', '/etc/aiopynamodb/global_default_settings.py')
 
 
 def _load_module(name, path):
@@ -30,12 +30,12 @@ def _load_module(name, path):
 
 override_settings = {}
 if os.path.isfile(OVERRIDE_SETTINGS_PATH):
-    override_settings = _load_module('__pynamodb_override_settings__', OVERRIDE_SETTINGS_PATH)
+    override_settings = _load_module('__aiopynamodb_override_settings__', OVERRIDE_SETTINGS_PATH)
     if hasattr(override_settings, 'session_cls') or hasattr(override_settings, 'request_timeout_seconds'):
         warnings.warn("The `session_cls` and `request_timeout_second` options are no longer supported")
-    log.info('Override settings for pynamo available {}'.format(OVERRIDE_SETTINGS_PATH))
+    log.info('Override settings for aiopynamodb available {}'.format(OVERRIDE_SETTINGS_PATH))
 else:
-    log.info('Override settings for pynamo not available {}'.format(OVERRIDE_SETTINGS_PATH))
+    log.info('Override settings for aiopynamodb not available {}'.format(OVERRIDE_SETTINGS_PATH))
     log.info('Using Default settings value')
 
 

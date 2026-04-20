@@ -1,18 +1,14 @@
-========
+===========
 AioPynamoDB
-========
-Work in progress. Careful in production.
-
-This library is as fork of `PynamoDB <https://github.com/pynamodb/PynamoDB>`_ to add async support.
-
-Basic functionality is working, help to improve it is welcome.
-
-
-** Known Issues **
- - Python type hints needs migration. MyPy testing implementation is pending and contributions in this area are welcome.
+===========
+Async fork of `PynamoDB <https://github.com/pynamodb/PynamoDB>`_ powered by `aiobotocore <https://github.com/aio-libs/aiobotocore>`_. Requires Python 3.10+.
 
 Installation
 ============
+From PyPI::
+
+    $ pip install aiopynamodb
+
 From GitHub::
 
     $ pip install git+https://github.com/brunobelloni/AioPynamoDB#egg=aiopynamodb
@@ -37,7 +33,7 @@ Create a model that describes your DynamoDB table.
         first_name = UnicodeAttribute(range_key=True)
         last_name = UnicodeAttribute(hash_key=True)
 
-PynamoDB allows you to create the table if needed (it must exist before you can use it!):
+AioPynamoDB allows you to create the table if needed (it must exist before you can use it!):
 
 .. code-block:: python
 

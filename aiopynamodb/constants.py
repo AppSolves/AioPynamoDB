@@ -1,5 +1,5 @@
 """
-Pynamodb constants
+AioPynamoDB constants
 """
 import sys
 if sys.version_info >= (3, 8):
