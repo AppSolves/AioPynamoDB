@@ -155,3 +155,4 @@ async def test_table_integration(ddb_url):
     await conn.scan()
     print("conn.delete_table...")
     await conn.delete_table()
+    await conn.close()

@@ -295,6 +295,14 @@ class Connection(object):
     def __repr__(self) -> str:
         return f"Connection<{self.host}>"
 
+    def __del__(self):
+        if self._client is not None:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.close())
+            except RuntimeError:
+                pass
+
     async def __aenter__(self):
         return self
 

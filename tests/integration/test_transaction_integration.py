@@ -79,13 +79,14 @@ TEST_MODELS = [
 ]
 
 
-@pytest_asyncio.fixture(scope='module')
+@pytest_asyncio.fixture
 async def connection(ddb_url):
     conn = Connection(host=ddb_url)
     yield conn
+    await conn.close()
 
 
-@pytest_asyncio.fixture(scope='module', autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def create_tables(ddb_url):
     for m in TEST_MODELS:
         m.Meta.host = ddb_url
@@ -100,6 +101,7 @@ async def create_tables(ddb_url):
     for m in TEST_MODELS:
         if await m.exists():
             await m.delete_table()
+        await m.close_connection()
 
 
 @pytest.mark.ddblocal

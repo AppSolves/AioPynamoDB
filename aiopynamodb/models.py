@@ -1086,6 +1086,13 @@ class Model(AttributeContainer, metaclass=MetaModel):
         return cls._connection
 
     @classmethod
+    async def close_connection(cls) -> None:
+        """Close the cached connection and release HTTP resources."""
+        if cls._connection is not None:
+            await cls._connection.close()
+            cls._connection = None
+
+    @classmethod
     def _serialize_value(cls, attr, value):
         """
         Serializes a value for use with DynamoDB

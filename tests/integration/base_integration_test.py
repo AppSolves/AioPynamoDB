@@ -168,3 +168,4 @@ async def test_connection_integration(ddb_url):
     )
     print("conn.delete_table...")
     await conn.delete_table(table_name)
+    await conn.close()
