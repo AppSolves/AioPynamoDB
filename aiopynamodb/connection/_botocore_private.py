@@ -1,7 +1,7 @@
 """
 Type-annotates the private aiobotocore APIs that we're currently relying on.
 """
-from typing import Dict, Awaitable
+from typing import Dict
 
 import aiobotocore.client
 import aiobotocore.credentials

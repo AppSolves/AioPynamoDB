@@ -1,11 +1,23 @@
 import asyncio
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from botocore.client import ClientError
 
-from aiopynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute, VersionAttribute
+from aiopynamodb.attributes import (
+    ListAttribute,
+    MapAttribute,
+    UnicodeAttribute,
+    VersionAttribute,
+)
 from aiopynamodb.connection import Connection
-from aiopynamodb.exceptions import PutError, UpdateError, TransactWriteError, DeleteError, DoesNotExist
+from aiopynamodb.exceptions import (
+    DeleteError,
+    DoesNotExist,
+    PutError,
+    TransactWriteError,
+    UpdateError,
+)
 from aiopynamodb.models import Model
 from aiopynamodb.transactions import TransactWrite
 
@@ -22,16 +34,13 @@ class Office(Model):
     class Meta:
         read_capacity_units = 1
         write_capacity_units = 1
-        table_name = 'Office'
+        table_name = "Office"
         host = "http://localhost:8000"
 
     office_id = UnicodeAttribute(hash_key=True)
     employees = ListAttribute(of=OfficeEmployeeMap)
     name = UnicodeAttribute()
     version = VersionAttribute()
-
-
-from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
@@ -47,23 +56,29 @@ async def assert_condition_check_fails():
         assert e.cause_response_message is not None
         assert "ConditionalCheckFailed" in e.cause_response_message
     else:
-        raise AssertionError("The version attribute conditional check should have failed.")
+        raise AssertionError(
+            "The version attribute conditional check should have failed."
+        )
 
 
 async def main():
     if not await Office.exists():
         await Office.create_table(wait=True)
 
-    justin = OfficeEmployeeMap(office_employee_id=str(uuid4()), person='justin')
-    garrett = OfficeEmployeeMap(office_employee_id=str(uuid4()), person='garrett')
-    office = Office(office_id=str(uuid4()), name="office 3", employees=[justin, garrett])
+    justin = OfficeEmployeeMap(office_employee_id=str(uuid4()), person="justin")
+    garrett = OfficeEmployeeMap(office_employee_id=str(uuid4()), person="garrett")
+    office = Office(
+        office_id=str(uuid4()), name="office 3", employees=[justin, garrett]
+    )
     await office.save()
     assert office.version == 1
 
     # Get a second local copy of Office
     office_out_of_date = await Office.get(office.office_id)
     # Add another employee and save the changes.
-    office.employees.append(OfficeEmployeeMap(office_employee_id=str(uuid4()), person='lita'))
+    office.employees.append(
+        OfficeEmployeeMap(office_employee_id=str(uuid4()), person="lita")
+    )
     await office.save()
     # After a successful save or update operation the version is set or incremented locally so there's no need to refresh
     # between operations using the same local copy.
@@ -72,7 +87,7 @@ async def main():
 
     # Condition check fails for update.
     async with assert_condition_check_fails():
-        await office_out_of_date.update(actions=[Office.name.set('new office name')])
+        await office_out_of_date.update(actions=[Office.name.set("new office name")])
 
     # Condition check fails for save.
     office_out_of_date.employees.remove(garrett)
@@ -90,21 +105,27 @@ async def main():
         await office.delete()
 
     # Example failed transactions.
-    connection = Connection(host='http://localhost:8000')
+    connection = Connection(host="http://localhost:8000")
 
-    async with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
-        transaction.save(Office(office.office_id, name='newer name', employees=[]))
+    async with assert_condition_check_fails(), TransactWrite(
+        connection=connection
+    ) as transaction:
+        transaction.save(Office(office.office_id, name="newer name", employees=[]))
 
-    async with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
+    async with assert_condition_check_fails(), TransactWrite(
+        connection=connection
+    ) as transaction:
         transaction.update(
-            Office(office.office_id, name='newer name', employees=[]),
+            Office(office.office_id, name="newer name", employees=[]),
             actions=[
-                Office.name.set('Newer Office Name'),
-            ]
+                Office.name.set("Newer Office Name"),
+            ],
         )
 
-    async with assert_condition_check_fails(), TransactWrite(connection=connection) as transaction:
-        transaction.delete(Office(office.office_id, name='newer name', employees=[]))
+    async with assert_condition_check_fails(), TransactWrite(
+        connection=connection
+    ) as transaction:
+        transaction.delete(Office(office.office_id, name="newer name", employees=[]))
 
     # Example successful transaction.
     office2 = Office(office_id=str(uuid4()), name="second office", employees=[justin])
@@ -115,14 +136,20 @@ async def main():
     assert office3.version == 1
 
     async with TransactWrite(connection=connection) as transaction:
-        transaction.condition_check(Office, office.office_id, condition=(Office.name.exists()))
+        transaction.condition_check(
+            Office, office.office_id, condition=(Office.name.exists())
+        )
         transaction.delete(office2)
-        transaction.save(Office(office_id=str(uuid4()), name="new office", employees=[justin, garrett]))
+        transaction.save(
+            Office(
+                office_id=str(uuid4()), name="new office", employees=[justin, garrett]
+            )
+        )
         transaction.update(
             office3,
             actions=[
-                Office.name.set('birdistheword'),
-            ]
+                Office.name.set("birdistheword"),
+            ],
         )
 
     try:
@@ -143,5 +170,5 @@ async def main():
     assert office.version == 3
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

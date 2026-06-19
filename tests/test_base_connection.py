@@ -4,10 +4,14 @@ Tests for the base connection class
 
 import base64
 import json
+from binascii import crc32
+from types import SimpleNamespace
 from unittest import mock
 from unittest.mock import patch
 from uuid import UUID
 
+import aiobotocore.endpoint
+import aiobotocore.retries.special
 import botocore
 import pytest
 from aiobotocore.awsrequest import AioAWSResponse
@@ -198,7 +202,7 @@ async def test_connection_create_table():
         "read_capacity_units": 1,
         "write_capacity_units": 1,
     }
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError):
         await conn.create_table(TEST_TABLE_NAME, **kwargs)
 
     kwargs["attribute_definitions"] = [
@@ -1930,6 +1934,45 @@ async def test_connection_close_without_client():
     conn = Connection(REGION)
     await conn.close()
     assert conn._client is None
+
+
+@pytest.mark.asyncio
+async def test_aiobotocore_patch_handles_non_awaitable_response_content():
+    operation_model = SimpleNamespace(
+        name="DescribeTable",
+        has_event_stream_output=False,
+        has_streaming_output=False,
+    )
+    http_response = SimpleNamespace(
+        headers={"content-length": "2"},
+        status_code=200,
+        content=b"{}",
+        raw=None,
+    )
+
+    response_dict = await aiobotocore.endpoint.convert_to_response_dict(
+        http_response, operation_model
+    )
+
+    assert response_dict["body"] == b"{}"
+
+
+@pytest.mark.asyncio
+async def test_aiobotocore_patch_handles_non_awaitable_checksum_content():
+    payload = b'{"TableNames":[]}'
+    checksum = str(crc32(payload) & 0xFFFFFFFF)
+    retry_handler = aiobotocore.retries.special.AioRetryDDBChecksumError()
+    context = SimpleNamespace(
+        operation_model=SimpleNamespace(
+            service_model=SimpleNamespace(service_name="dynamodb")
+        ),
+        http_response=SimpleNamespace(
+            headers={retry_handler._CHECKSUM_HEADER: checksum},
+            content=payload,
+        ),
+    )
+
+    assert await retry_handler.is_retryable(context) is False
 
 
 @pytest.mark.asyncio

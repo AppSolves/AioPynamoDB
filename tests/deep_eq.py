@@ -18,7 +18,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import datetime, time, functools, operator
+import datetime
+import functools
+import operator
+import time
 
 default_fudge = datetime.timedelta(seconds=0, microseconds=0, days=0)
 
@@ -87,13 +90,15 @@ def deep_eq(_v1, _v2, datetime_fudge=default_fudge, _assert=False):
     >>> deep_eq(d1, d2, datetime_fudge=datetime.timedelta(seconds=5))
     True
     """
-    _deep_eq = functools.partial(deep_eq, datetime_fudge=datetime_fudge,
-                                 _assert=_assert)
+    _deep_eq = functools.partial(
+        deep_eq, datetime_fudge=datetime_fudge, _assert=_assert
+    )
 
-    def _check_assert(R, a, b, reason=''):
+    def _check_assert(R, a, b, reason=""):
         if _assert and not R:
             assert 0, "an assertion has failed in deep_eq ({}) {} != {}".format(
-                reason, str(a), str(b))
+                reason, str(a), str(b)
+            )
         return R
 
     def _deep_dict_eq(d1, d2):
@@ -101,25 +106,31 @@ def deep_eq(_v1, _v2, datetime_fudge=default_fudge, _assert=False):
         if k1 != k2:  # keys should be exactly equal
             return _check_assert(False, k1, k2, "keys")
 
-        return _check_assert(operator.eq(sum(_deep_eq(d1[k], d2[k])
-                                             for k in k1),
-                                         len(k1)), d1, d2, "dictionaries")
+        return _check_assert(
+            operator.eq(sum(_deep_eq(d1[k], d2[k]) for k in k1), len(k1)),
+            d1,
+            d2,
+            "dictionaries",
+        )
 
     def _deep_iter_eq(l1, l2):
         if len(l1) != len(l2):
             return _check_assert(False, l1, l2, "lengths")
-        return _check_assert(operator.eq(sum(_deep_eq(v1, v2)
-                                             for v1, v2 in zip(l1, l2)),
-                                         len(l1)), l1, l2, "iterables")
+        return _check_assert(
+            operator.eq(sum(_deep_eq(v1, v2) for v1, v2 in zip(l1, l2)), len(l1)),
+            l1,
+            l2,
+            "iterables",
+        )
 
     def op(a, b):
         _op = operator.eq
-        if type(a) == datetime.datetime and type(b) == datetime.datetime:
+        if type(a) is datetime.datetime and type(b) is datetime.datetime:
             s = datetime_fudge.seconds
             t1, t2 = (time.mktime(a.timetuple()), time.mktime(b.timetuple()))
-            l = t1 - t2
-            l = -l if l > 0 else l
-            return _check_assert((-s if s > 0 else s) <= l, a, b, "dates")
+            diff = t1 - t2
+            val = -diff if diff > 0 else diff
+            return _check_assert((-s if s > 0 else s) <= val, a, b, "dates")
         return _check_assert(_op(a, b), a, b, "values")
 
     c1, c2 = (_v1, _v2)

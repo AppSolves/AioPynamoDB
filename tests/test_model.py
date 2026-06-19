@@ -8,9 +8,8 @@ import re
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
-from unittest import TestCase
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 
 import pytest
 from botocore.client import ClientError
@@ -49,6 +48,10 @@ from .data import (
 from .deep_eq import deep_eq
 
 PATCH_METHOD = 'aiopynamodb.connection.Connection._make_api_call'
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 class GamePlayerOpponentIndex(LocalSecondaryIndex):
@@ -290,7 +293,7 @@ class ComplexKeyModel(Model):
         table_name = 'ComplexKey'
 
     name = UnicodeAttribute(hash_key=True)
-    date_created = UTCDateTimeAttribute(default=datetime.utcnow)
+    date_created = UTCDateTimeAttribute(default=utc_now)
 
 
 class Location(MapAttribute):
@@ -518,7 +521,7 @@ class ModelTestCase(IsolatedAsyncioTestCase):
             await UserModel.create_table(read_capacity_units=2, write_capacity_units=2)
 
         # Test for default region
-        assert UserModel.Meta.region == None
+        assert UserModel.Meta.region is None
         assert UserModel.Meta.connect_timeout_seconds, 15
         assert UserModel.Meta.read_timeout_seconds == 30
         assert UserModel.Meta.max_retry_attempts == 3
@@ -720,6 +723,7 @@ class ModelTestCase(IsolatedAsyncioTestCase):
         Model with complex key
         """
         item = ComplexKeyModel('test')
+        assert item.date_created.tzinfo == timezone.utc
 
         with patch(PATCH_METHOD, new_callable=AsyncMock) as req:
             req.return_value = COMPLEX_ITEM_DATA
@@ -2637,7 +2641,7 @@ class ModelTestCase(IsolatedAsyncioTestCase):
                                        FULL_CAR_MODEL_ITEM_DATA, 'car_id', 'N',
                                        '123')
 
-        with patch(PATCH_METHOD, new=fake_db) as req:
+        with patch(PATCH_METHOD, new=fake_db):
             with self.assertRaises(ValueError) as cm:
                 await CarModel(car_id=2).save()
             assert str(cm.exception) == "Attribute 'car_info' cannot be None"

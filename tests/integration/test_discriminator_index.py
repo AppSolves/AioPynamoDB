@@ -2,9 +2,6 @@ import pytest
 
 import aiopynamodb.exceptions
 from aiopynamodb.attributes import DiscriminatorAttribute
-from aiopynamodb.attributes import DynamicMapAttribute
-from aiopynamodb.attributes import ListAttribute
-from aiopynamodb.attributes import MapAttribute
 from aiopynamodb.attributes import NumberAttribute
 from aiopynamodb.attributes import UnicodeAttribute
 from aiopynamodb.indexes import AllProjection

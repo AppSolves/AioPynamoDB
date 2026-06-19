@@ -1,6 +1,7 @@
 """
 Lowest level connection
 """
+
 import asyncio
 import contextlib
 import logging
@@ -13,48 +14,128 @@ from aiobotocore.session import get_session
 from botocore.client import ClientError
 from botocore.exceptions import BotoCoreError
 
+from aiopynamodb.connection._aiobotocore_patch import _patch_aiobotocore
 from aiopynamodb.connection._botocore_private import BotocoreBaseClientPrivate
 from aiopynamodb.constants import (
-    RETURN_CONSUMED_CAPACITY_VALUES, RETURN_ITEM_COLL_METRICS_VALUES,
-    RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY, RETURN_VALUES_VALUES,
-    EXCLUSIVE_START_KEY, SCAN_INDEX_FORWARD, ATTR_DEFINITIONS,
-    BATCH_WRITE_ITEM, CONSISTENT_READ, DESCRIBE_TABLE, KEY_CONDITION_EXPRESSION,
-    BATCH_GET_ITEM, DELETE_REQUEST, SELECT_VALUES, RETURN_VALUES, REQUEST_ITEMS,
-    PROJECTION_EXPRESSION, SERVICE_NAME, DELETE_ITEM, PUT_REQUEST, UPDATE_ITEM, TABLE_NAME,
-    INDEX_NAME, KEY_SCHEMA, ATTR_NAME, ATTR_TYPE, TABLE_KEY, KEY_TYPE, GET_ITEM, UPDATE,
-    PUT_ITEM, SELECT, LIMIT, QUERY, SCAN, ITEM, LOCAL_SECONDARY_INDEXES,
-    KEYS, KEY, SEGMENT, TOTAL_SEGMENTS, CREATE_TABLE, PROVISIONED_THROUGHPUT, READ_CAPACITY_UNITS,
-    WRITE_CAPACITY_UNITS, GLOBAL_SECONDARY_INDEXES, PROJECTION, EXCLUSIVE_START_TABLE_NAME, TOTAL,
-    DELETE_TABLE, UPDATE_TABLE, LIST_TABLES, GLOBAL_SECONDARY_INDEX_UPDATES, CONSUMED_CAPACITY, CAPACITY_UNITS,
+    ATTR_DEFINITIONS,
+    ATTR_NAME,
+    ATTR_TYPE,
     ATTRIBUTE_TYPES,
-    STREAM_SPECIFICATION, STREAM_VIEW_TYPE, STREAM_ENABLED,
-    EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES,
-    CONDITION_EXPRESSION, FILTER_EXPRESSION,
-    TRANSACT_WRITE_ITEMS, TRANSACT_GET_ITEMS, CLIENT_REQUEST_TOKEN, TRANSACT_ITEMS, TRANSACT_CONDITION_CHECK,
-    TRANSACT_GET, TRANSACT_PUT, TRANSACT_DELETE, TRANSACT_UPDATE, UPDATE_EXPRESSION,
-    RETURN_VALUES_ON_CONDITION_FAILURE_VALUES, RETURN_VALUES_ON_CONDITION_FAILURE,
-    AVAILABLE_BILLING_MODES, DEFAULT_BILLING_MODE, BILLING_MODE, PAY_PER_REQUEST_BILLING_MODE,
-    PROVISIONED_BILLING_MODE, TIME_TO_LIVE_SPECIFICATION, ENABLED, UPDATE_TIME_TO_LIVE, TAGS, VALUE
+    AVAILABLE_BILLING_MODES,
+    BATCH_GET_ITEM,
+    BATCH_WRITE_ITEM,
+    BILLING_MODE,
+    CAPACITY_UNITS,
+    CLIENT_REQUEST_TOKEN,
+    CONDITION_EXPRESSION,
+    CONSISTENT_READ,
+    CONSUMED_CAPACITY,
+    CREATE_TABLE,
+    DEFAULT_BILLING_MODE,
+    DELETE_ITEM,
+    DELETE_REQUEST,
+    DELETE_TABLE,
+    DESCRIBE_TABLE,
+    ENABLED,
+    EXCLUSIVE_START_KEY,
+    EXCLUSIVE_START_TABLE_NAME,
+    EXPRESSION_ATTRIBUTE_NAMES,
+    EXPRESSION_ATTRIBUTE_VALUES,
+    FILTER_EXPRESSION,
+    GET_ITEM,
+    GLOBAL_SECONDARY_INDEX_UPDATES,
+    GLOBAL_SECONDARY_INDEXES,
+    INDEX_NAME,
+    ITEM,
+    KEY,
+    KEY_CONDITION_EXPRESSION,
+    KEY_SCHEMA,
+    KEY_TYPE,
+    KEYS,
+    LIMIT,
+    LIST_TABLES,
+    LOCAL_SECONDARY_INDEXES,
+    PAY_PER_REQUEST_BILLING_MODE,
+    PROJECTION,
+    PROJECTION_EXPRESSION,
+    PROVISIONED_BILLING_MODE,
+    PROVISIONED_THROUGHPUT,
+    PUT_ITEM,
+    PUT_REQUEST,
+    QUERY,
+    READ_CAPACITY_UNITS,
+    REQUEST_ITEMS,
+    RETURN_CONSUMED_CAPACITY,
+    RETURN_CONSUMED_CAPACITY_VALUES,
+    RETURN_ITEM_COLL_METRICS,
+    RETURN_ITEM_COLL_METRICS_VALUES,
+    RETURN_VALUES,
+    RETURN_VALUES_ON_CONDITION_FAILURE,
+    RETURN_VALUES_ON_CONDITION_FAILURE_VALUES,
+    RETURN_VALUES_VALUES,
+    SCAN,
+    SCAN_INDEX_FORWARD,
+    SEGMENT,
+    SELECT,
+    SELECT_VALUES,
+    SERVICE_NAME,
+    STREAM_ENABLED,
+    STREAM_SPECIFICATION,
+    STREAM_VIEW_TYPE,
+    TABLE_KEY,
+    TABLE_NAME,
+    TAGS,
+    TIME_TO_LIVE_SPECIFICATION,
+    TOTAL,
+    TOTAL_SEGMENTS,
+    TRANSACT_CONDITION_CHECK,
+    TRANSACT_DELETE,
+    TRANSACT_GET,
+    TRANSACT_GET_ITEMS,
+    TRANSACT_ITEMS,
+    TRANSACT_PUT,
+    TRANSACT_UPDATE,
+    TRANSACT_WRITE_ITEMS,
+    UPDATE,
+    UPDATE_EXPRESSION,
+    UPDATE_ITEM,
+    UPDATE_TABLE,
+    UPDATE_TIME_TO_LIVE,
+    VALUE,
+    WRITE_CAPACITY_UNITS,
 )
 from aiopynamodb.exceptions import (
-    TableError, QueryError, PutError, DeleteError, UpdateError, GetError, ScanError, TableDoesNotExist,
+    CancellationReason,
+    DeleteError,
+    GetError,
+    PutError,
+    QueryError,
+    ScanError,
+    TableDoesNotExist,
+    TableError,
+    TransactGetError,
+    TransactWriteError,
+    UpdateError,
     VerboseClientError,
-    TransactGetError, TransactWriteError, CancellationReason,
 )
 from aiopynamodb.expressions.condition import Condition
 from aiopynamodb.expressions.operand import Path
 from aiopynamodb.expressions.projection import create_projection_expression
 from aiopynamodb.expressions.update import Action, Update
 from aiopynamodb.settings import get_settings_value
-from aiopynamodb.signals import pre_dynamodb_send, post_dynamodb_send
+from aiopynamodb.signals import post_dynamodb_send, pre_dynamodb_send
 from aiopynamodb.types import HASH, RANGE
 
+_patch_aiobotocore()
+
 BOTOCORE_EXCEPTIONS = (BotoCoreError, ClientError)
-RATE_LIMITING_ERROR_CODES = ['ProvisionedThroughputExceededException', 'ThrottlingException']
+RATE_LIMITING_ERROR_CODES = [
+    "ProvisionedThroughputExceededException",
+    "ThrottlingException",
+]
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
-
 
 
 class MetaTable(object):
@@ -165,27 +246,27 @@ class MetaTable(object):
                         return schema_key.get(ATTR_NAME)
         return None
 
-    def get_item_attribute_map(self, attributes: Dict, item_key=ITEM, pythonic_key: bool = True):
+    def get_item_attribute_map(
+        self, attributes: Dict, item_key=ITEM, pythonic_key: bool = True
+    ):
         """
         Builds up a dynamodb compatible AttributeValue map
         """
         if pythonic_key:
             item_key = item_key
-        attr_map: Dict[str, Dict] = {
-            item_key: {}
-        }
+        attr_map: Dict[str, Dict] = {item_key: {}}
         for key, value in attributes.items():
             # In this case, the user provided a mapping
             # {'key': {'S': 'value'}}
             if isinstance(value, dict):
                 attr_map[item_key][key] = value
             else:
-                attr_map[item_key][key] = {
-                    self.get_attribute_type(key): value
-                }
+                attr_map[item_key][key] = {self.get_attribute_type(key): value}
         return attr_map
 
-    def get_attribute_type(self, attribute_name: str, value: Optional[Any] = None) -> str:
+    def get_attribute_type(
+        self, attribute_name: str, value: Optional[Any] = None
+    ) -> str:
         """
         Returns the proper attribute type for a given attribute name
         """
@@ -196,10 +277,14 @@ class MetaTable(object):
             for key in ATTRIBUTE_TYPES:
                 if key in value:
                     return key
-        attr_names = [attr.get(ATTR_NAME) for attr in self.data.get(ATTR_DEFINITIONS, [])]
+        attr_names = [
+            attr.get(ATTR_NAME) for attr in self.data.get(ATTR_DEFINITIONS, [])
+        ]
         raise ValueError("No attribute {} in {}".format(attribute_name, attr_names))
 
-    def get_identifier_map(self, hash_key: str, range_key: Optional[str] = None, key: str = KEY):
+    def get_identifier_map(
+        self, hash_key: str, range_key: Optional[str] = None, key: str = KEY
+    ):
         """
         Builds the identifier map that is common to several operations
         """
@@ -220,12 +305,13 @@ class MetaTable(object):
         """
         Builds the exclusive start key attribute map
         """
-        if isinstance(exclusive_start_key, dict) and self.hash_keyname in exclusive_start_key:
+        if (
+            isinstance(exclusive_start_key, dict)
+            and self.hash_keyname in exclusive_start_key
+        ):
             # This is useful when paginating results, as the LastEvaluatedKey returned is already
             # structured properly
-            return {
-                EXCLUSIVE_START_KEY: exclusive_start_key
-            }
+            return {EXCLUSIVE_START_KEY: exclusive_start_key}
         else:
             return {
                 EXCLUSIVE_START_KEY: {
@@ -241,17 +327,19 @@ class Connection(object):
     A higher level abstraction over botocore
     """
 
-    def __init__(self,
-                 region: Optional[str] = None,
-                 host: Optional[str] = None,
-                 read_timeout_seconds: Optional[float] = None,
-                 connect_timeout_seconds: Optional[float] = None,
-                 max_retry_attempts: Optional[int] = None,
-                 max_pool_connections: Optional[int] = None,
-                 extra_headers: Optional[Mapping[str, str]] = None,
-                 aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None,
-                 aws_session_token: Optional[str] = None):
+    def __init__(
+        self,
+        region: Optional[str] = None,
+        host: Optional[str] = None,
+        read_timeout_seconds: Optional[float] = None,
+        connect_timeout_seconds: Optional[float] = None,
+        max_retry_attempts: Optional[int] = None,
+        max_pool_connections: Optional[int] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        aws_access_key_id: Optional[str] = None,
+        aws_secret_access_key: Optional[str] = None,
+        aws_session_token: Optional[str] = None,
+    ):
         self._tables: Dict[str, MetaTable] = {}
         self.host = host
         self._client: Optional[BotocoreBaseClientPrivate] = None
@@ -261,32 +349,36 @@ class Connection(object):
         if region:
             self.region = region
         else:
-            self.region = get_settings_value('region')
+            self.region = get_settings_value("region")
 
         if connect_timeout_seconds is not None:
             self._connect_timeout_seconds = connect_timeout_seconds
         else:
-            self._connect_timeout_seconds = get_settings_value('connect_timeout_seconds')
+            self._connect_timeout_seconds = get_settings_value(
+                "connect_timeout_seconds"
+            )
 
         if read_timeout_seconds is not None:
             self._read_timeout_seconds = read_timeout_seconds
         else:
-            self._read_timeout_seconds = get_settings_value('read_timeout_seconds')
+            self._read_timeout_seconds = get_settings_value("read_timeout_seconds")
 
         if max_retry_attempts is not None:
             self._max_retry_attempts_exception = max_retry_attempts
         else:
-            self._max_retry_attempts_exception = get_settings_value('max_retry_attempts')
+            self._max_retry_attempts_exception = get_settings_value(
+                "max_retry_attempts"
+            )
 
         if max_pool_connections is not None:
             self._max_pool_connections = max_pool_connections
         else:
-            self._max_pool_connections = get_settings_value('max_pool_connections')
+            self._max_pool_connections = get_settings_value("max_pool_connections")
 
         if extra_headers is not None:
             self._extra_headers = extra_headers
         else:
-            self._extra_headers = get_settings_value('extra_headers')
+            self._extra_headers = get_settings_value("extra_headers")
 
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
@@ -313,8 +405,14 @@ class Connection(object):
         """
         Dispatches `operation_name` with arguments `operation_kwargs`
         """
-        if operation_name not in [DESCRIBE_TABLE, LIST_TABLES, UPDATE_TABLE, UPDATE_TIME_TO_LIVE, DELETE_TABLE,
-                                  CREATE_TABLE]:
+        if operation_name not in [
+            DESCRIBE_TABLE,
+            LIST_TABLES,
+            UPDATE_TABLE,
+            UPDATE_TIME_TO_LIVE,
+            DELETE_TABLE,
+            CREATE_TABLE,
+        ]:
             if RETURN_CONSUMED_CAPACITY not in operation_kwargs:
                 operation_kwargs.update(self.get_consumed_capacity_map(TOTAL))
         log.debug("Calling %s with arguments %s", operation_name, operation_kwargs)
@@ -330,18 +428,33 @@ class Connection(object):
             capacity = data.get(CONSUMED_CAPACITY)
             if isinstance(capacity, dict) and CAPACITY_UNITS in capacity:
                 capacity = capacity.get(CAPACITY_UNITS)
-            log.debug("%s %s consumed %s units", data.get(TABLE_NAME, ''), operation_name, capacity)
+            log.debug(
+                "%s %s consumed %s units",
+                data.get(TABLE_NAME, ""),
+                operation_name,
+                capacity,
+            )
         return data
 
     def send_post_boto_callback(self, operation_name, req_uuid, table_name):
         try:
-            post_dynamodb_send.send(self, operation_name=operation_name, table_name=table_name, req_uuid=req_uuid)
+            post_dynamodb_send.send(
+                self,
+                operation_name=operation_name,
+                table_name=table_name,
+                req_uuid=req_uuid,
+            )
         except Exception:
             log.exception("post_boto callback threw an exception.")
 
     def send_pre_boto_callback(self, operation_name, req_uuid, table_name):
         try:
-            pre_dynamodb_send.send(self, operation_name=operation_name, table_name=table_name, req_uuid=req_uuid)
+            pre_dynamodb_send.send(
+                self,
+                operation_name=operation_name,
+                table_name=table_name,
+                req_uuid=req_uuid,
+            )
         except Exception:
             log.exception("pre_boto callback threw an exception.")
 
@@ -354,13 +467,15 @@ class Connection(object):
             client = await self.client()
             return await client._make_api_call(operation_name, operation_kwargs)
         except ClientError as e:
-            resp_metadata = e.response.get('ResponseMetadata', {}).get('HTTPHeaders', {})
-            cancellation_reasons = e.response.get('CancellationReasons', [])
+            resp_metadata = e.response.get("ResponseMetadata", {}).get(
+                "HTTPHeaders", {}
+            )
+            cancellation_reasons = e.response.get("CancellationReasons", [])
 
-            botocore_props = {'Error': e.response.get('Error', {})}
+            botocore_props = {"Error": e.response.get("Error", {})}
             verbose_props = {
-                'request_id': resp_metadata.get('x-amzn-requestid', ''),
-                'table_name': self._get_table_name_for_error_context(operation_kwargs),
+                "request_id": resp_metadata.get("x-amzn-requestid", ""),
+                "table_name": self._get_table_name_for_error_context(operation_kwargs),
             }
             raise VerboseClientError(
                 botocore_props,
@@ -369,10 +484,14 @@ class Connection(object):
                 cancellation_reasons=(
                     (
                         CancellationReason(
-                            code=d['Code'],
-                            message=d.get('Message'),
-                            raw_item=cast(Optional[Dict[str, Dict[str, Any]]], d.get('Item')),
-                        ) if d['Code'] != 'None' else None
+                            code=d["Code"],
+                            message=d.get("Message"),
+                            raw_item=cast(
+                                Optional[Dict[str, Dict[str, Any]]], d.get("Item")
+                            ),
+                        )
+                        if d["Code"] != "None"
+                        else None
                     )
                     for d in cancellation_reasons
                 ),
@@ -381,7 +500,7 @@ class Connection(object):
     def _get_table_name_for_error_context(self, operation_kwargs) -> str:
         # First handle the two multi-table cases: batch and transaction operations
         if REQUEST_ITEMS in operation_kwargs:
-            return ','.join(operation_kwargs[REQUEST_ITEMS])
+            return ",".join(operation_kwargs[REQUEST_ITEMS])
         elif TRANSACT_ITEMS in operation_kwargs:
             table_names = []
             for item in operation_kwargs[TRANSACT_ITEMS]:
@@ -395,13 +514,13 @@ class Connection(object):
         """
         Returns a valid aiobotocore session
         """
-        if getattr(self, '_session', None) is None:
+        if getattr(self, "_session", None) is None:
             self._session = get_session()
             if self._aws_access_key_id and self._aws_secret_access_key:
                 self._session.set_credentials(
                     self._aws_access_key_id,
                     self._aws_secret_access_key,
-                    self._aws_session_token
+                    self._aws_session_token,
                 )
         return self._session
 
@@ -413,16 +532,19 @@ class Connection(object):
         if self._client is not None and self._client_loop is not current_loop:
             await self.close()
 
-        if not self._client or (self._client._request_signer and not self._client._request_signer._credentials):
+        if not self._client or (
+            self._client._request_signer
+            and not self._client._request_signer._credentials
+        ):
             config = botocore.client.Config(
                 parameter_validation=False,
                 connect_timeout=self._connect_timeout_seconds,
                 read_timeout=self._read_timeout_seconds,
                 max_pool_connections=self._max_pool_connections,
                 retries={
-                    'total_max_attempts': 1 + self._max_retry_attempts_exception,
-                    'mode': 'standard',
-                }
+                    "total_max_attempts": 1 + self._max_retry_attempts_exception,
+                    "mode": "standard",
+                },
             )
             self._client = await self._exit_stack.enter_async_context(
                 self.session.create_client(
@@ -432,7 +554,9 @@ class Connection(object):
                     config=config,
                 )
             )
-            self._client.meta.events.register_first('before-send.*.*', self._before_send)
+            self._client.meta.events.register_first(
+                "before-send.*.*", self._before_send
+            )
             self._client_loop = current_loop
 
         return self._client
@@ -465,17 +589,17 @@ class Connection(object):
             raise TableError(f"Meta-table for '{table_name}' not initialized") from None
 
     async def create_table(
-            self,
-            table_name: str,
-            attribute_definitions: Optional[Any] = None,
-            key_schema: Optional[Any] = None,
-            read_capacity_units: Optional[int] = None,
-            write_capacity_units: Optional[int] = None,
-            global_secondary_indexes: Optional[Any] = None,
-            local_secondary_indexes: Optional[Any] = None,
-            stream_specification: Optional[Dict] = None,
-            billing_mode: str = DEFAULT_BILLING_MODE,
-            tags: Optional[Dict[str, str]] = None,
+        self,
+        table_name: str,
+        attribute_definitions: Optional[Any] = None,
+        key_schema: Optional[Any] = None,
+        read_capacity_units: Optional[int] = None,
+        write_capacity_units: Optional[int] = None,
+        global_secondary_indexes: Optional[Any] = None,
+        local_secondary_indexes: Optional[Any] = None,
+        stream_specification: Optional[Dict] = None,
+        billing_mode: str = DEFAULT_BILLING_MODE,
+        tags: Optional[Dict[str, str]] = None,
     ) -> Dict:
         """
         Performs the CreateTable operation
@@ -486,20 +610,26 @@ class Connection(object):
             PROVISIONED_THROUGHPUT: {
                 READ_CAPACITY_UNITS: read_capacity_units,
                 WRITE_CAPACITY_UNITS: write_capacity_units,
-            }
+            },
         }
         attrs_list = []
         if attribute_definitions is None:
             raise ValueError("attribute_definitions argument is required")
         for attr in attribute_definitions:
-            attrs_list.append({
-                ATTR_NAME: attr.get(ATTR_NAME) or attr['attribute_name'],
-                ATTR_TYPE: attr.get(ATTR_TYPE) or attr['attribute_type']
-            })
+            attrs_list.append(
+                {
+                    ATTR_NAME: attr.get(ATTR_NAME) or attr["attribute_name"],
+                    ATTR_TYPE: attr.get(ATTR_TYPE) or attr["attribute_type"],
+                }
+            )
         operation_kwargs[ATTR_DEFINITIONS] = attrs_list
 
         if billing_mode not in AVAILABLE_BILLING_MODES:
-            raise ValueError("incorrect value for billing_mode, available modes: {}".format(AVAILABLE_BILLING_MODES))
+            raise ValueError(
+                "incorrect value for billing_mode, available modes: {}".format(
+                    AVAILABLE_BILLING_MODES
+                )
+            )
         if billing_mode == PAY_PER_REQUEST_BILLING_MODE:
             del operation_kwargs[PROVISIONED_THROUGHPUT]
         elif billing_mode == PROVISIONED_BILLING_MODE:
@@ -509,10 +639,12 @@ class Connection(object):
             global_secondary_indexes_list = []
             for index in global_secondary_indexes:
                 index_kwargs = {
-                    INDEX_NAME: index.get('index_name'),
-                    KEY_SCHEMA: sorted(index.get('key_schema'), key=lambda x: x.get(KEY_TYPE)),
-                    PROJECTION: index.get('projection'),
-                    PROVISIONED_THROUGHPUT: index.get('provisioned_throughput')
+                    INDEX_NAME: index.get("index_name"),
+                    KEY_SCHEMA: sorted(
+                        index.get("key_schema"), key=lambda x: x.get(KEY_TYPE)
+                    ),
+                    PROJECTION: index.get("projection"),
+                    PROVISIONED_THROUGHPUT: index.get("provisioned_throughput"),
                 }
                 if billing_mode == PAY_PER_REQUEST_BILLING_MODE:
                     del index_kwargs[PROVISIONED_THROUGHPUT]
@@ -523,35 +655,38 @@ class Connection(object):
             raise ValueError("key_schema is required")
         key_schema_list = []
         for item in key_schema:
-            key_schema_list.append({
-                ATTR_NAME: item.get(ATTR_NAME) or item['attribute_name'],
-                KEY_TYPE: str(item.get(KEY_TYPE) or item['key_type']).upper()
-            })
-        operation_kwargs[KEY_SCHEMA] = sorted(key_schema_list, key=lambda x: x.get(KEY_TYPE))
+            key_schema_list.append(
+                {
+                    ATTR_NAME: item.get(ATTR_NAME) or item["attribute_name"],
+                    KEY_TYPE: str(item.get(KEY_TYPE) or item["key_type"]).upper(),
+                }
+            )
+        operation_kwargs[KEY_SCHEMA] = sorted(
+            key_schema_list, key=lambda x: x.get(KEY_TYPE)
+        )
 
         local_secondary_indexes_list = []
         if local_secondary_indexes:
             for index in local_secondary_indexes:
-                local_secondary_indexes_list.append({
-                    INDEX_NAME: index.get('index_name'),
-                    KEY_SCHEMA: sorted(index.get('key_schema'), key=lambda x: x.get(KEY_TYPE)),
-                    PROJECTION: index.get('projection'),
-                })
+                local_secondary_indexes_list.append(
+                    {
+                        INDEX_NAME: index.get("index_name"),
+                        KEY_SCHEMA: sorted(
+                            index.get("key_schema"), key=lambda x: x.get(KEY_TYPE)
+                        ),
+                        PROJECTION: index.get("projection"),
+                    }
+                )
             operation_kwargs[LOCAL_SECONDARY_INDEXES] = local_secondary_indexes_list
 
         if stream_specification:
             operation_kwargs[STREAM_SPECIFICATION] = {
-                STREAM_ENABLED: stream_specification['stream_enabled'],
-                STREAM_VIEW_TYPE: stream_specification['stream_view_type']
+                STREAM_ENABLED: stream_specification["stream_enabled"],
+                STREAM_VIEW_TYPE: stream_specification["stream_view_type"],
             }
 
         if tags:
-            operation_kwargs[TAGS] = [
-                {
-                    KEY: k,
-                    VALUE: v
-                } for k, v in tags.items()
-            ]
+            operation_kwargs[TAGS] = [{KEY: k, VALUE: v} for k, v in tags.items()]
 
         try:
             data = await self.dispatch(CREATE_TABLE, operation_kwargs)
@@ -559,7 +694,9 @@ class Connection(object):
             raise TableError("Failed to create table: {}".format(e), e)
         return data
 
-    async def update_time_to_live(self, table_name: str, ttl_attribute_name: str) -> Dict:
+    async def update_time_to_live(
+        self, table_name: str, ttl_attribute_name: str
+    ) -> Dict:
         """
         Performs the UpdateTimeToLive operation
         """
@@ -568,7 +705,7 @@ class Connection(object):
             TIME_TO_LIVE_SPECIFICATION: {
                 ATTR_NAME: ttl_attribute_name,
                 ENABLED: True,
-            }
+            },
         }
         try:
             return await self.dispatch(UPDATE_TIME_TO_LIVE, operation_kwargs)
@@ -579,9 +716,7 @@ class Connection(object):
         """
         Performs the DeleteTable operation
         """
-        operation_kwargs = {
-            TABLE_NAME: table_name
-        }
+        operation_kwargs = {TABLE_NAME: table_name}
         try:
             data = await self.dispatch(DELETE_TABLE, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
@@ -589,60 +724,67 @@ class Connection(object):
         return data
 
     async def update_table(
-            self,
-            table_name: str,
-            read_capacity_units: Optional[int] = None,
-            write_capacity_units: Optional[int] = None,
-            global_secondary_index_updates: Optional[Any] = None,
+        self,
+        table_name: str,
+        read_capacity_units: Optional[int] = None,
+        write_capacity_units: Optional[int] = None,
+        global_secondary_index_updates: Optional[Any] = None,
     ) -> Dict:
         """
         Performs the UpdateTable operation
         """
-        operation_kwargs: Dict[str, Any] = {
-            TABLE_NAME: table_name
-        }
-        if read_capacity_units and not write_capacity_units or write_capacity_units and not read_capacity_units:
-            raise ValueError("read_capacity_units and write_capacity_units are required together")
+        operation_kwargs: Dict[str, Any] = {TABLE_NAME: table_name}
+        if (
+            read_capacity_units
+            and not write_capacity_units
+            or write_capacity_units
+            and not read_capacity_units
+        ):
+            raise ValueError(
+                "read_capacity_units and write_capacity_units are required together"
+            )
         if read_capacity_units and write_capacity_units:
             operation_kwargs[PROVISIONED_THROUGHPUT] = {
                 READ_CAPACITY_UNITS: read_capacity_units,
-                WRITE_CAPACITY_UNITS: write_capacity_units
+                WRITE_CAPACITY_UNITS: write_capacity_units,
             }
         if global_secondary_index_updates:
             global_secondary_indexes_list = []
             for index in global_secondary_index_updates:
-                global_secondary_indexes_list.append({
-                    UPDATE: {
-                        INDEX_NAME: index.get('index_name'),
-                        PROVISIONED_THROUGHPUT: {
-                            READ_CAPACITY_UNITS: index.get('read_capacity_units'),
-                            WRITE_CAPACITY_UNITS: index.get('write_capacity_units')
+                global_secondary_indexes_list.append(
+                    {
+                        UPDATE: {
+                            INDEX_NAME: index.get("index_name"),
+                            PROVISIONED_THROUGHPUT: {
+                                READ_CAPACITY_UNITS: index.get("read_capacity_units"),
+                                WRITE_CAPACITY_UNITS: index.get("write_capacity_units"),
+                            },
                         }
                     }
-                })
-            operation_kwargs[GLOBAL_SECONDARY_INDEX_UPDATES] = global_secondary_indexes_list
+                )
+            operation_kwargs[GLOBAL_SECONDARY_INDEX_UPDATES] = (
+                global_secondary_indexes_list
+            )
         try:
             return await self.dispatch(UPDATE_TABLE, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
             raise TableError("Failed to update table: {}".format(e), e)
 
     async def list_tables(
-            self,
-            exclusive_start_table_name: Optional[str] = None,
-            limit: Optional[int] = None,
+        self,
+        exclusive_start_table_name: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> Dict:
         """
         Performs the ListTables operation
         """
         operation_kwargs: Dict[str, Any] = {}
         if exclusive_start_table_name:
-            operation_kwargs.update({
-                EXCLUSIVE_START_TABLE_NAME: exclusive_start_table_name
-            })
+            operation_kwargs.update(
+                {EXCLUSIVE_START_TABLE_NAME: exclusive_start_table_name}
+            )
         if limit is not None:
-            operation_kwargs.update({
-                LIMIT: limit
-            })
+            operation_kwargs.update({LIMIT: limit})
         try:
             return await self.dispatch(LIST_TABLES, operation_kwargs)
         except BOTOCORE_EXCEPTIONS as e:
@@ -652,9 +794,7 @@ class Connection(object):
         """
         Performs the DescribeTable operation
         """
-        operation_kwargs = {
-            TABLE_NAME: table_name
-        }
+        operation_kwargs = {TABLE_NAME: table_name}
         try:
             data = await self.dispatch(DESCRIBE_TABLE, operation_kwargs)
             table_data = data.get(TABLE_KEY)
@@ -668,17 +808,17 @@ class Connection(object):
         except BotoCoreError as e:
             raise TableError("Unable to describe table: {}".format(e), e)
         except ClientError as e:
-            if 'ResourceNotFound' in e.response['Error']['Code']:
-                raise TableDoesNotExist(e.response['Error']['Message'])
+            if "ResourceNotFound" in e.response["Error"]["Code"]:
+                raise TableDoesNotExist(e.response["Error"]["Message"])
             else:
                 raise
 
     def get_item_attribute_map(
-            self,
-            table_name: str,
-            attributes: Any,
-            item_key: str = ITEM,
-            pythonic_key: bool = True,
+        self,
+        table_name: str,
+        attributes: Any,
+        item_key: str = ITEM,
+        pythonic_key: bool = True,
     ) -> Dict:
         """
         Builds up a dynamodb compatible AttributeValue map
@@ -687,15 +827,10 @@ class Connection(object):
         if tbl is None:
             raise TableError("No such table {}".format(table_name))
         return tbl.get_item_attribute_map(
-            attributes,
-            item_key=item_key,
-            pythonic_key=pythonic_key)
+            attributes, item_key=item_key, pythonic_key=pythonic_key
+        )
 
-    def parse_attribute(
-            self,
-            attribute: Any,
-            return_type: bool = False
-    ) -> Any:
+    def parse_attribute(self, attribute: Any, return_type: bool = False) -> Any:
         """
         Returns the attribute value, where the attribute can be
         a raw attribute value, or a dictionary containing the type:
@@ -714,10 +849,7 @@ class Connection(object):
             return attribute
 
     def get_attribute_type(
-            self,
-            table_name: str,
-            attribute_name: str,
-            value: Optional[Any] = None
+        self, table_name: str, attribute_name: str, value: Optional[Any] = None
     ) -> str:
         """
         Returns the proper attribute type for a given attribute name
@@ -729,11 +861,11 @@ class Connection(object):
         return tbl.get_attribute_type(attribute_name, value=value)
 
     def get_identifier_map(
-            self,
-            table_name: str,
-            hash_key: str,
-            range_key: Optional[str] = None,
-            key: str = KEY
+        self,
+        table_name: str,
+        hash_key: str,
+        range_key: Optional[str] = None,
+        key: str = KEY,
     ) -> Dict:
         """
         Builds the identifier map that is common to several operations
@@ -748,48 +880,60 @@ class Connection(object):
         Builds the consumed capacity map that is common to several operations
         """
         if return_consumed_capacity.upper() not in RETURN_CONSUMED_CAPACITY_VALUES:
-            raise ValueError("{} must be one of {}".format(RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY_VALUES))
-        return {
-            RETURN_CONSUMED_CAPACITY: str(return_consumed_capacity).upper()
-        }
+            raise ValueError(
+                "{} must be one of {}".format(
+                    RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY_VALUES
+                )
+            )
+        return {RETURN_CONSUMED_CAPACITY: str(return_consumed_capacity).upper()}
 
     def get_return_values_map(self, return_values: str) -> Dict:
         """
         Builds the return values map that is common to several operations
         """
         if return_values.upper() not in RETURN_VALUES_VALUES:
-            raise ValueError("{} must be one of {}".format(RETURN_VALUES, RETURN_VALUES_VALUES))
-        return {
-            RETURN_VALUES: str(return_values).upper()
-        }
+            raise ValueError(
+                "{} must be one of {}".format(RETURN_VALUES, RETURN_VALUES_VALUES)
+            )
+        return {RETURN_VALUES: str(return_values).upper()}
 
     def get_return_values_on_condition_failure_map(
-            self,
-            return_values_on_condition_failure: str
+        self, return_values_on_condition_failure: str
     ) -> Dict:
         """
         Builds the return values map that is common to several operations
         """
         if return_values_on_condition_failure.upper() not in RETURN_VALUES_VALUES:
-            raise ValueError("{} must be one of {}".format(
-                RETURN_VALUES_ON_CONDITION_FAILURE,
-                RETURN_VALUES_ON_CONDITION_FAILURE_VALUES
-            ))
+            raise ValueError(
+                "{} must be one of {}".format(
+                    RETURN_VALUES_ON_CONDITION_FAILURE,
+                    RETURN_VALUES_ON_CONDITION_FAILURE_VALUES,
+                )
+            )
         return {
-            RETURN_VALUES_ON_CONDITION_FAILURE: str(return_values_on_condition_failure).upper()
+            RETURN_VALUES_ON_CONDITION_FAILURE: str(
+                return_values_on_condition_failure
+            ).upper()
         }
 
     def get_item_collection_map(self, return_item_collection_metrics: str) -> Dict:
         """
         Builds the item collection map
         """
-        if return_item_collection_metrics.upper() not in RETURN_ITEM_COLL_METRICS_VALUES:
-            raise ValueError("{} must be one of {}".format(RETURN_ITEM_COLL_METRICS, RETURN_ITEM_COLL_METRICS_VALUES))
-        return {
-            RETURN_ITEM_COLL_METRICS: str(return_item_collection_metrics).upper()
-        }
+        if (
+            return_item_collection_metrics.upper()
+            not in RETURN_ITEM_COLL_METRICS_VALUES
+        ):
+            raise ValueError(
+                "{} must be one of {}".format(
+                    RETURN_ITEM_COLL_METRICS, RETURN_ITEM_COLL_METRICS_VALUES
+                )
+            )
+        return {RETURN_ITEM_COLL_METRICS: str(return_item_collection_metrics).upper()}
 
-    def get_exclusive_start_key_map(self, table_name: str, exclusive_start_key: str) -> Dict:
+    def get_exclusive_start_key_map(
+        self, table_name: str, exclusive_start_key: str
+    ) -> Dict:
         """
         Builds the exclusive start key attribute map
         """
@@ -799,69 +943,84 @@ class Connection(object):
         return tbl.get_exclusive_start_key_map(exclusive_start_key)
 
     def get_operation_kwargs(
-            self,
-            table_name: str,
-            hash_key: str,
-            range_key: Optional[str] = None,
-            key: str = KEY,
-            attributes: Optional[Any] = None,
-            attributes_to_get: Optional[Any] = None,
-            actions: Optional[Sequence[Action]] = None,
-            condition: Optional[Condition] = None,
-            consistent_read: Optional[bool] = None,
-            return_values: Optional[str] = None,
-            return_consumed_capacity: Optional[str] = None,
-            return_item_collection_metrics: Optional[str] = None,
-            return_values_on_condition_failure: Optional[str] = None
+        self,
+        table_name: str,
+        hash_key: str,
+        range_key: Optional[str] = None,
+        key: str = KEY,
+        attributes: Optional[Any] = None,
+        attributes_to_get: Optional[Any] = None,
+        actions: Optional[Sequence[Action]] = None,
+        condition: Optional[Condition] = None,
+        consistent_read: Optional[bool] = None,
+        return_values: Optional[str] = None,
+        return_consumed_capacity: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
+        return_values_on_condition_failure: Optional[str] = None,
     ) -> Dict:
-        self._check_condition('condition', condition)
+        self._check_condition("condition", condition)
 
         operation_kwargs: Dict[str, Any] = {}
         name_placeholders: Dict[str, str] = {}
         expression_attribute_values: Dict[str, Any] = {}
 
         operation_kwargs[TABLE_NAME] = table_name
-        operation_kwargs.update(self.get_identifier_map(table_name, hash_key, range_key, key=key))
+        operation_kwargs.update(
+            self.get_identifier_map(table_name, hash_key, range_key, key=key)
+        )
         if attributes and operation_kwargs.get(ITEM) is not None:
             attrs = self.get_item_attribute_map(table_name, attributes)
             operation_kwargs[ITEM].update(attrs[ITEM])
         if attributes_to_get is not None:
-            projection_expression = create_projection_expression(attributes_to_get, name_placeholders)
+            projection_expression = create_projection_expression(
+                attributes_to_get, name_placeholders
+            )
             operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
         if condition is not None:
-            condition_expression = condition.serialize(name_placeholders, expression_attribute_values)
+            condition_expression = condition.serialize(
+                name_placeholders, expression_attribute_values
+            )
             operation_kwargs[CONDITION_EXPRESSION] = condition_expression
         if consistent_read is not None:
             operation_kwargs[CONSISTENT_READ] = consistent_read
         if return_values is not None:
             operation_kwargs.update(self.get_return_values_map(return_values))
         if return_values_on_condition_failure is not None:
-            operation_kwargs.update(self.get_return_values_on_condition_failure_map(return_values_on_condition_failure))
+            operation_kwargs.update(
+                self.get_return_values_on_condition_failure_map(
+                    return_values_on_condition_failure
+                )
+            )
         if return_consumed_capacity is not None:
-            operation_kwargs.update(self.get_consumed_capacity_map(return_consumed_capacity))
+            operation_kwargs.update(
+                self.get_consumed_capacity_map(return_consumed_capacity)
+            )
         if return_item_collection_metrics is not None:
-            operation_kwargs.update(self.get_item_collection_map(return_item_collection_metrics))
+            operation_kwargs.update(
+                self.get_item_collection_map(return_item_collection_metrics)
+            )
         if actions is not None:
             update_expression = Update(*actions)
             operation_kwargs[UPDATE_EXPRESSION] = update_expression.serialize(
-                name_placeholders,
-                expression_attribute_values
+                name_placeholders, expression_attribute_values
             )
         if name_placeholders:
-            operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = self._reverse_dict(name_placeholders)
+            operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = self._reverse_dict(
+                name_placeholders
+            )
         if expression_attribute_values:
             operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
         return operation_kwargs
 
     async def delete_item(
-            self,
-            table_name: str,
-            hash_key: str,
-            range_key: Optional[str] = None,
-            condition: Optional[Condition] = None,
-            return_values: Optional[str] = None,
-            return_consumed_capacity: Optional[str] = None,
-            return_item_collection_metrics: Optional[str] = None,
+        self,
+        table_name: str,
+        hash_key: str,
+        range_key: Optional[str] = None,
+        condition: Optional[Condition] = None,
+        return_values: Optional[str] = None,
+        return_consumed_capacity: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         """
         Performs the DeleteItem operation and returns the result
@@ -873,7 +1032,7 @@ class Connection(object):
             condition=condition,
             return_values=return_values,
             return_consumed_capacity=return_consumed_capacity,
-            return_item_collection_metrics=return_item_collection_metrics
+            return_item_collection_metrics=return_item_collection_metrics,
         )
         try:
             return await self.dispatch(DELETE_ITEM, operation_kwargs)
@@ -881,15 +1040,15 @@ class Connection(object):
             raise DeleteError("Failed to delete item: {}".format(e), e)
 
     async def update_item(
-            self,
-            table_name: str,
-            hash_key: str,
-            range_key: Optional[str] = None,
-            actions: Optional[Sequence[Action]] = None,
-            condition: Optional[Condition] = None,
-            return_consumed_capacity: Optional[str] = None,
-            return_item_collection_metrics: Optional[str] = None,
-            return_values: Optional[str] = None,
+        self,
+        table_name: str,
+        hash_key: str,
+        range_key: Optional[str] = None,
+        actions: Optional[Sequence[Action]] = None,
+        condition: Optional[Condition] = None,
+        return_consumed_capacity: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
+        return_values: Optional[str] = None,
     ) -> Dict:
         """
         Performs the UpdateItem operation
@@ -913,15 +1072,15 @@ class Connection(object):
             raise UpdateError("Failed to update item: {}".format(e), e)
 
     async def put_item(
-            self,
-            table_name: str,
-            hash_key: str,
-            range_key: Optional[str] = None,
-            attributes: Optional[Any] = None,
-            condition: Optional[Condition] = None,
-            return_values: Optional[str] = None,
-            return_consumed_capacity: Optional[str] = None,
-            return_item_collection_metrics: Optional[str] = None,
+        self,
+        table_name: str,
+        hash_key: str,
+        range_key: Optional[str] = None,
+        attributes: Optional[Any] = None,
+        condition: Optional[Condition] = None,
+        return_values: Optional[str] = None,
+        return_consumed_capacity: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         """
         Performs the PutItem operation and returns the result
@@ -935,7 +1094,7 @@ class Connection(object):
             condition=condition,
             return_values=return_values,
             return_consumed_capacity=return_consumed_capacity,
-            return_item_collection_metrics=return_item_collection_metrics
+            return_item_collection_metrics=return_item_collection_metrics,
         )
         try:
             return await self.dispatch(PUT_ITEM, operation_kwargs)
@@ -943,30 +1102,34 @@ class Connection(object):
             raise PutError("Failed to put item: {}".format(e), e)
 
     def _get_transact_operation_kwargs(
-            self,
-            client_request_token: Optional[str] = None,
-            return_consumed_capacity: Optional[str] = None,
-            return_item_collection_metrics: Optional[str] = None
+        self,
+        client_request_token: Optional[str] = None,
+        return_consumed_capacity: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         operation_kwargs = {}
         if client_request_token is not None:
             operation_kwargs[CLIENT_REQUEST_TOKEN] = client_request_token
         if return_consumed_capacity is not None:
-            operation_kwargs.update(self.get_consumed_capacity_map(return_consumed_capacity))
+            operation_kwargs.update(
+                self.get_consumed_capacity_map(return_consumed_capacity)
+            )
         if return_item_collection_metrics is not None:
-            operation_kwargs.update(self.get_item_collection_map(return_item_collection_metrics))
+            operation_kwargs.update(
+                self.get_item_collection_map(return_item_collection_metrics)
+            )
 
         return operation_kwargs
 
     async def transact_write_items(
-            self,
-            condition_check_items: Sequence[Dict],
-            delete_items: Sequence[Dict],
-            put_items: Sequence[Dict],
-            update_items: Sequence[Dict],
-            client_request_token: Optional[str] = None,
-            return_consumed_capacity: Optional[str] = None,
-            return_item_collection_metrics: Optional[str] = None,
+        self,
+        condition_check_items: Sequence[Dict],
+        delete_items: Sequence[Dict],
+        put_items: Sequence[Dict],
+        update_items: Sequence[Dict],
+        client_request_token: Optional[str] = None,
+        return_consumed_capacity: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         """
         Performs the TransactWrite operation and returns the result
@@ -975,20 +1138,14 @@ class Connection(object):
         transact_items.extend(
             {TRANSACT_CONDITION_CHECK: item} for item in condition_check_items
         )
-        transact_items.extend(
-            {TRANSACT_DELETE: item} for item in delete_items
-        )
-        transact_items.extend(
-            {TRANSACT_PUT: item} for item in put_items
-        )
-        transact_items.extend(
-            {TRANSACT_UPDATE: item} for item in update_items
-        )
+        transact_items.extend({TRANSACT_DELETE: item} for item in delete_items)
+        transact_items.extend({TRANSACT_PUT: item} for item in put_items)
+        transact_items.extend({TRANSACT_UPDATE: item} for item in update_items)
 
         operation_kwargs = self._get_transact_operation_kwargs(
             client_request_token=client_request_token,
             return_consumed_capacity=return_consumed_capacity,
-            return_item_collection_metrics=return_item_collection_metrics
+            return_item_collection_metrics=return_item_collection_metrics,
         )
         operation_kwargs[TRANSACT_ITEMS] = transact_items
 
@@ -998,17 +1155,17 @@ class Connection(object):
             raise TransactWriteError("Failed to write transaction items", e)
 
     async def transact_get_items(
-            self,
-            get_items: Sequence[Dict],
-            return_consumed_capacity: Optional[str] = None,
+        self,
+        get_items: Sequence[Dict],
+        return_consumed_capacity: Optional[str] = None,
     ) -> Dict:
         """
         Performs the TransactGet operation and returns the result
         """
-        operation_kwargs = self._get_transact_operation_kwargs(return_consumed_capacity=return_consumed_capacity)
-        operation_kwargs[TRANSACT_ITEMS] = [
-            {TRANSACT_GET: item} for item in get_items
-        ]
+        operation_kwargs = self._get_transact_operation_kwargs(
+            return_consumed_capacity=return_consumed_capacity
+        )
+        operation_kwargs[TRANSACT_ITEMS] = [{TRANSACT_GET: item} for item in get_items]
 
         try:
             return await self.dispatch(TRANSACT_GET_ITEMS, operation_kwargs)
@@ -1016,39 +1173,47 @@ class Connection(object):
             raise TransactGetError("Failed to get transaction items", e)
 
     async def batch_write_item(
-            self,
-            table_name: str,
-            put_items: Optional[Any] = None,
-            delete_items: Optional[Any] = None,
-            return_consumed_capacity: Optional[str] = None,
-            return_item_collection_metrics: Optional[str] = None,
+        self,
+        table_name: str,
+        put_items: Optional[Any] = None,
+        delete_items: Optional[Any] = None,
+        return_consumed_capacity: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
     ) -> Dict:
         """
         Performs the batch_write_item operation
         """
         if put_items is None and delete_items is None:
             raise ValueError("Either put_items or delete_items must be specified")
-        operation_kwargs: Dict[str, Any] = {
-            REQUEST_ITEMS: {
-                table_name: []
-            }
-        }
+        operation_kwargs: Dict[str, Any] = {REQUEST_ITEMS: {table_name: []}}
         if return_consumed_capacity:
-            operation_kwargs.update(self.get_consumed_capacity_map(return_consumed_capacity))
+            operation_kwargs.update(
+                self.get_consumed_capacity_map(return_consumed_capacity)
+            )
         if return_item_collection_metrics:
-            operation_kwargs.update(self.get_item_collection_map(return_item_collection_metrics))
+            operation_kwargs.update(
+                self.get_item_collection_map(return_item_collection_metrics)
+            )
         put_items_list = []
         if put_items:
             for item in put_items:
-                put_items_list.append({
-                    PUT_REQUEST: self.get_item_attribute_map(table_name, item, pythonic_key=False)
-                })
+                put_items_list.append(
+                    {
+                        PUT_REQUEST: self.get_item_attribute_map(
+                            table_name, item, pythonic_key=False
+                        )
+                    }
+                )
         delete_items_list = []
         if delete_items:
             for item in delete_items:
-                delete_items_list.append({
-                    DELETE_REQUEST: self.get_item_attribute_map(table_name, item, item_key=KEY, pythonic_key=False)
-                })
+                delete_items_list.append(
+                    {
+                        DELETE_REQUEST: self.get_item_attribute_map(
+                            table_name, item, item_key=KEY, pythonic_key=False
+                        )
+                    }
+                )
         operation_kwargs[REQUEST_ITEMS][table_name] = delete_items_list + put_items_list
         try:
             return await self.dispatch(BATCH_WRITE_ITEM, operation_kwargs)
@@ -1056,30 +1221,30 @@ class Connection(object):
             raise PutError("Failed to batch write items: {}".format(e), e)
 
     async def batch_get_item(
-            self,
-            table_name: str,
-            keys: Sequence[str],
-            consistent_read: Optional[bool] = None,
-            return_consumed_capacity: Optional[str] = None,
-            attributes_to_get: Optional[Any] = None,
+        self,
+        table_name: str,
+        keys: Sequence[str],
+        consistent_read: Optional[bool] = None,
+        return_consumed_capacity: Optional[str] = None,
+        attributes_to_get: Optional[Any] = None,
     ) -> Dict:
         """
         Performs the batch get item operation
         """
-        operation_kwargs: Dict[str, Any] = {
-            REQUEST_ITEMS: {
-                table_name: {}
-            }
-        }
+        operation_kwargs: Dict[str, Any] = {REQUEST_ITEMS: {table_name: {}}}
 
         args_map: Dict[str, Any] = {}
         name_placeholders: Dict[str, str] = {}
         if consistent_read:
             args_map[CONSISTENT_READ] = consistent_read
         if return_consumed_capacity:
-            operation_kwargs.update(self.get_consumed_capacity_map(return_consumed_capacity))
+            operation_kwargs.update(
+                self.get_consumed_capacity_map(return_consumed_capacity)
+            )
         if attributes_to_get is not None:
-            projection_expression = create_projection_expression(attributes_to_get, name_placeholders)
+            projection_expression = create_projection_expression(
+                attributes_to_get, name_placeholders
+            )
             args_map[PROJECTION_EXPRESSION] = projection_expression
         if name_placeholders:
             args_map[EXPRESSION_ATTRIBUTE_NAMES] = self._reverse_dict(name_placeholders)
@@ -1087,9 +1252,7 @@ class Connection(object):
 
         keys_map: Dict[str, List] = {KEYS: []}
         for key in keys:
-            keys_map[KEYS].append(
-                self.get_item_attribute_map(table_name, key)[ITEM]
-            )
+            keys_map[KEYS].append(self.get_item_attribute_map(table_name, key)[ITEM])
         operation_kwargs[REQUEST_ITEMS][table_name].update(keys_map)
         try:
             return await self.dispatch(BATCH_GET_ITEM, operation_kwargs)
@@ -1097,12 +1260,12 @@ class Connection(object):
             raise GetError("Failed to batch get items: {}".format(e), e)
 
     async def get_item(
-            self,
-            table_name: str,
-            hash_key: str,
-            range_key: Optional[str] = None,
-            consistent_read: bool = False,
-            attributes_to_get: Optional[Any] = None,
+        self,
+        table_name: str,
+        hash_key: str,
+        range_key: Optional[str] = None,
+        consistent_read: bool = False,
+        attributes_to_get: Optional[Any] = None,
     ) -> Dict:
         """
         Performs the GetItem operation and returns the result
@@ -1112,7 +1275,7 @@ class Connection(object):
             hash_key=hash_key,
             range_key=range_key,
             consistent_read=consistent_read,
-            attributes_to_get=attributes_to_get
+            attributes_to_get=attributes_to_get,
         )
         try:
             return await self.dispatch(GET_ITEM, operation_kwargs)
@@ -1120,41 +1283,49 @@ class Connection(object):
             raise GetError("Failed to get item: {}".format(e), e)
 
     async def scan(
-            self,
-            table_name: str,
-            filter_condition: Optional[Any] = None,
-            attributes_to_get: Optional[Any] = None,
-            limit: Optional[int] = None,
-            return_consumed_capacity: Optional[str] = None,
-            exclusive_start_key: Optional[str] = None,
-            segment: Optional[int] = None,
-            total_segments: Optional[int] = None,
-            consistent_read: Optional[bool] = None,
-            index_name: Optional[str] = None,
+        self,
+        table_name: str,
+        filter_condition: Optional[Any] = None,
+        attributes_to_get: Optional[Any] = None,
+        limit: Optional[int] = None,
+        return_consumed_capacity: Optional[str] = None,
+        exclusive_start_key: Optional[str] = None,
+        segment: Optional[int] = None,
+        total_segments: Optional[int] = None,
+        consistent_read: Optional[bool] = None,
+        index_name: Optional[str] = None,
     ) -> Dict:
         """
         Performs the scan operation
         """
-        self._check_condition('filter_condition', filter_condition)
+        self._check_condition("filter_condition", filter_condition)
 
         operation_kwargs: Dict[str, Any] = {TABLE_NAME: table_name}
         name_placeholders: Dict[str, str] = {}
         expression_attribute_values: Dict[str, Any] = {}
 
         if filter_condition is not None:
-            filter_expression = filter_condition.serialize(name_placeholders, expression_attribute_values)
+            filter_expression = filter_condition.serialize(
+                name_placeholders, expression_attribute_values
+            )
             operation_kwargs[FILTER_EXPRESSION] = filter_expression
         if attributes_to_get is not None:
-            projection_expression = create_projection_expression(attributes_to_get, name_placeholders)
+            projection_expression = create_projection_expression(
+                attributes_to_get, name_placeholders
+            )
             operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
         if index_name:
             operation_kwargs[INDEX_NAME] = index_name
         if limit is not None:
             operation_kwargs[LIMIT] = limit
         if return_consumed_capacity:
-            operation_kwargs.update(self.get_consumed_capacity_map(return_consumed_capacity))
+            operation_kwargs.update(
+                self.get_consumed_capacity_map(return_consumed_capacity)
+            )
         if exclusive_start_key:
-            operation_kwargs.update(self.get_exclusive_start_key_map(table_name, exclusive_start_key))
+            operation_kwargs.update(
+                self.get_exclusive_start_key_map(table_name, exclusive_start_key)
+            )
         if segment is not None:
             operation_kwargs[SEGMENT] = segment
         if total_segments:
@@ -1162,7 +1333,9 @@ class Connection(object):
         if consistent_read:
             operation_kwargs[CONSISTENT_READ] = consistent_read
         if name_placeholders:
-            operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = self._reverse_dict(name_placeholders)
+            operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = self._reverse_dict(
+                name_placeholders
+            )
         if expression_attribute_values:
             operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
 
@@ -1172,25 +1345,25 @@ class Connection(object):
             raise ScanError("Failed to scan table: {}".format(e), e)
 
     async def query(
-            self,
-            table_name: str,
-            hash_key: str,
-            range_key_condition: Optional[Condition] = None,
-            filter_condition: Optional[Any] = None,
-            attributes_to_get: Optional[Any] = None,
-            consistent_read: bool = False,
-            exclusive_start_key: Optional[Any] = None,
-            index_name: Optional[str] = None,
-            limit: Optional[int] = None,
-            return_consumed_capacity: Optional[str] = None,
-            scan_index_forward: Optional[bool] = None,
-            select: Optional[str] = None,
+        self,
+        table_name: str,
+        hash_key: str,
+        range_key_condition: Optional[Condition] = None,
+        filter_condition: Optional[Any] = None,
+        attributes_to_get: Optional[Any] = None,
+        consistent_read: bool = False,
+        exclusive_start_key: Optional[Any] = None,
+        index_name: Optional[str] = None,
+        limit: Optional[int] = None,
+        return_consumed_capacity: Optional[str] = None,
+        scan_index_forward: Optional[bool] = None,
+        select: Optional[str] = None,
     ) -> Dict:
         """
         Performs the Query operation and returns the result
         """
-        self._check_condition('range_key_condition', range_key_condition)
-        self._check_condition('filter_condition', filter_condition)
+        self._check_condition("range_key_condition", range_key_condition)
+        self._check_condition("filter_condition", filter_condition)
 
         operation_kwargs: Dict[str, Any] = {TABLE_NAME: table_name}
         name_placeholders: Dict[str, str] = {}
@@ -1201,35 +1374,49 @@ class Connection(object):
             raise TableError("No such table: {}".format(table_name))
         if index_name:
             if not tbl.has_index_name(index_name):
-                raise ValueError("Table {} has no index: {}".format(table_name, index_name))
+                raise ValueError(
+                    "Table {} has no index: {}".format(table_name, index_name)
+                )
             hash_keyname = tbl.get_index_hash_keyname(index_name)
         else:
             hash_keyname = tbl.hash_keyname
 
         hash_condition_value = {
-            self.get_attribute_type(table_name, hash_keyname, hash_key): self.parse_attribute(hash_key)}
+            self.get_attribute_type(
+                table_name, hash_keyname, hash_key
+            ): self.parse_attribute(hash_key)
+        }
         key_condition = Path([hash_keyname]) == hash_condition_value
         if range_key_condition is not None:
             key_condition &= range_key_condition
 
         operation_kwargs[KEY_CONDITION_EXPRESSION] = key_condition.serialize(
-            name_placeholders, expression_attribute_values)
+            name_placeholders, expression_attribute_values
+        )
         if filter_condition is not None:
-            filter_expression = filter_condition.serialize(name_placeholders, expression_attribute_values)
+            filter_expression = filter_condition.serialize(
+                name_placeholders, expression_attribute_values
+            )
             operation_kwargs[FILTER_EXPRESSION] = filter_expression
         if attributes_to_get:
-            projection_expression = create_projection_expression(attributes_to_get, name_placeholders)
+            projection_expression = create_projection_expression(
+                attributes_to_get, name_placeholders
+            )
             operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
         if consistent_read:
             operation_kwargs[CONSISTENT_READ] = True
         if exclusive_start_key:
-            operation_kwargs.update(self.get_exclusive_start_key_map(table_name, exclusive_start_key))
+            operation_kwargs.update(
+                self.get_exclusive_start_key_map(table_name, exclusive_start_key)
+            )
         if index_name:
             operation_kwargs[INDEX_NAME] = index_name
         if limit is not None:
             operation_kwargs[LIMIT] = limit
         if return_consumed_capacity:
-            operation_kwargs.update(self.get_consumed_capacity_map(return_consumed_capacity))
+            operation_kwargs.update(
+                self.get_consumed_capacity_map(return_consumed_capacity)
+            )
         if select:
             if select.upper() not in SELECT_VALUES:
                 raise ValueError("{} must be one of {}".format(SELECT, SELECT_VALUES))
@@ -1237,7 +1424,9 @@ class Connection(object):
         if scan_index_forward is not None:
             operation_kwargs[SCAN_INDEX_FORWARD] = scan_index_forward
         if name_placeholders:
-            operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = self._reverse_dict(name_placeholders)
+            operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = self._reverse_dict(
+                name_placeholders
+            )
         if expression_attribute_values:
             operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
 

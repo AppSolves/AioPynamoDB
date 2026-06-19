@@ -2,7 +2,7 @@
 Integration tests for the model API
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aiopynamodb.models import Model
 from aiopynamodb.indexes import GlobalSecondaryIndex, AllProjection, LocalSecondaryIndex
@@ -11,6 +11,10 @@ from aiopynamodb.attributes import (
     VersionAttribute)
 
 import pytest
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 class LSIndex(LocalSecondaryIndex):
@@ -51,7 +55,7 @@ async def test_model_integration(ddb_url):
         view = NumberAttribute(default=0)
         view_index = LSIndex()
         epoch_index = GSIndex()
-        epoch = UTCDateTimeAttribute(default=datetime.now)
+        epoch = UTCDateTimeAttribute(default=utc_now)
         content = BinaryAttribute(null=True, legacy_encoding=False)
         scores = NumberSetAttribute()
         version = VersionAttribute()
@@ -92,7 +96,7 @@ async def test_model_integration(ddb_url):
     async for item in TestModel.scan():
         print("Scanned item: {}".format(item))
 
-    tstamp = datetime.now()
+    tstamp = datetime.now(timezone.utc)
     query_obj = TestModel('query_forum', 'query_thread')
     query_obj.forum = 'foo'
     await query_obj.save()

@@ -1,11 +1,20 @@
 import asyncio
 import io
 import logging
+import os
 import timeit
 import zlib
-from datetime import datetime
+from datetime import datetime, timezone
 
 import urllib3
+
+from aiopynamodb.attributes import (
+    BooleanAttribute,
+    MapAttribute,
+    UnicodeAttribute,
+    UTCDateTimeAttribute,
+)
+from aiopynamodb.models import Model
 
 COUNT = 1000
 
@@ -28,7 +37,7 @@ def results_new_benchmark(name: str) -> None:
 
 async def results_record_result(callback, count):
     callback_name = callback.__name__
-    bench_name = callback_name.split('_', 1)[-1]
+    bench_name = callback_name.split("_", 1)[-1]
     try:
         # Create a wrapped version of the async function that runs the loop
         async def run_benchmark():
@@ -58,9 +67,10 @@ async def results_record_result(callback, count):
 # Monkeypatching
 # =============================================================================
 
+
 async def mock_urlopen(self, method, url, body, headers, **kwargs):
-    target = headers.get('X-Amz-Target')
-    if target.endswith(b'DescribeTable'):
+    target = headers.get("X-Amz-Target")
+    if target.endswith(b"DescribeTable"):
         body = """{
             "Table": {
                 "TableName": "users",
@@ -81,7 +91,7 @@ async def mock_urlopen(self, method, url, body, headers, **kwargs):
             }
         }
         """
-    elif target.endswith(b'GetItem'):
+    elif target.endswith(b"GetItem"):
         body = """{
             "Item": {
                 "user_name": {"S": "some_user"},
@@ -101,7 +111,7 @@ async def mock_urlopen(self, method, url, body, headers, **kwargs):
             }
         }
         """
-    elif target.endswith(b'PutItem'):
+    elif target.endswith(b"PutItem"):
         body = """{
             "Attributes": {
                 "user_name": {"S": "some_user"},
@@ -124,7 +134,7 @@ async def mock_urlopen(self, method, url, body, headers, **kwargs):
     else:
         body = ""
 
-    body_bytes = body.encode('utf-8')
+    body_bytes = body.encode("utf-8")
     headers = {
         "content-type": "application/x-amz-json-1.0",
         "content-length": str(len(body_bytes)),
@@ -151,9 +161,6 @@ def patch_urllib3():
 # Setup
 # =============================================================================
 
-import os
-from aiopynamodb.models import Model
-from aiopynamodb.attributes import UnicodeAttribute, BooleanAttribute, MapAttribute, UTCDateTimeAttribute
 
 os.environ["AWS_ACCESS_KEY_ID"] = "1"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "1"
@@ -168,9 +175,9 @@ class UserPreferences(MapAttribute):
 
 class UserModel(Model):
     class Meta:
-        table_name = 'User'
+        table_name = "User"
         max_retry_attempts = 0
-        host = 'http://localhost:8000'
+        host = "http://localhost:8000"
 
     user_name = UnicodeAttribute(hash_key=True)
     first_name = UnicodeAttribute()
@@ -186,6 +193,7 @@ class UserModel(Model):
 # GetItem
 # =============================================================================
 
+
 @register_benchmark("get_item")
 async def bench_get_item():
     await UserModel.get("username")
@@ -194,6 +202,7 @@ async def bench_get_item():
 # =============================================================================
 # PutItem
 # =============================================================================
+
 
 @register_benchmark("put_item")
 async def bench_put_item():
@@ -207,9 +216,9 @@ async def bench_put_item():
         preferences=UserPreferences(
             timezone="America/New_York",
             allows_notifications=True,
-            date_of_birth=datetime.utcnow(),
+            date_of_birth=datetime.now(timezone.utc),
         ),
-        last_login=datetime.utcnow(),
+        last_login=datetime.now(timezone.utc),
     )
     await user.save()
 
@@ -218,15 +227,24 @@ async def bench_put_item():
 # Benchmarks
 # =============================================================================
 
+
 async def main():
     if not await UserModel.exists():
-        await UserModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
+        await UserModel.create_table(
+            read_capacity_units=1, write_capacity_units=1, wait=True
+        )
 
     results_new_benchmark("Basic operations")
 
     await results_record_result(benchmark_registry["get_item"], COUNT)
     await results_record_result(benchmark_registry["put_item"], COUNT)
 
+    print()
+    print("Above metrics are in call/sec, larger is better.")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
     print()
     print("Above metrics are in call/sec, larger is better.")
 

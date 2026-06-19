@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import botocore.exceptions
 import pytest
@@ -21,6 +21,10 @@ RESOURCE_NOT_FOUND = 'ResourceNotFoundException'
 TRANSACTION_CANCELLED = 'TransactionCanceledException'
 TRANSACTION_IN_PROGRESS = 'TransactionInProgressException'
 VALIDATION_EXCEPTION = 'ValidationException'
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 class User(Model):
@@ -47,7 +51,7 @@ class LineItem(Model):
         table_name = 'line-item'
 
     user_id = NumberAttribute(hash_key=True)
-    created_at = UTCDateTimeAttribute(range_key=True, default=datetime.now())
+    created_at = UTCDateTimeAttribute(range_key=True, default=utc_now)
     amount = NumberAttribute()
     currency = UnicodeAttribute()
 

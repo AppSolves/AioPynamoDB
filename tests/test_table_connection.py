@@ -1,7 +1,6 @@
 """
 Test suite for the table class
 """
-from unittest import TestCase
 import pytest
 import asyncio
 from unittest import IsolatedAsyncioTestCase

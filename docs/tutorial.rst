@@ -288,7 +288,7 @@ atomically updating the view count of an item + updating the value of the last p
 
     >>> thread_item.update(actions=[
             Thread.views.set(Thread.views + 1),
-            Thread.last_post_datetime.set(datetime.now()),
+            Thread.last_post_datetime.set(datetime.now(timezone.utc)),
         ])
 
 Update actions use the update expression syntax (see :ref:`updates`).
@@ -301,4 +301,3 @@ Update actions use the update expression syntax (see :ref:`updates`).
 .. code-block:: python
 
     >>> thread_item.update_item('views', 1, action='add')
-

@@ -1,4 +1,4 @@
-from typing import Tuple, TypeVar, Type, Any, List, Optional, Dict, Union, Text, Generic
+from typing import TypeVar, Type, Any, List, Optional, Dict
 
 from aiopynamodb.connection import Connection
 from aiopynamodb.constants import ITEM, RESPONSES

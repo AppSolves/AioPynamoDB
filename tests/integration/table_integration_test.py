@@ -143,7 +143,7 @@ async def test_table_integration(ddb_url):
         put_items=items
     )
     print("conn.batch_get_items...")
-    data = await conn.batch_get_item(
+    await conn.batch_get_item(
         items
     )
     print("conn.query...")

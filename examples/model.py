@@ -3,12 +3,17 @@ An example using Amazon's Thread example for motivation
 
 http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SampleTablesAndData.html
 """
+
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aiopynamodb.attributes import (
-    ListAttribute, UnicodeAttribute, NumberAttribute, UnicodeSetAttribute, UTCDateTimeAttribute
+    ListAttribute,
+    NumberAttribute,
+    UnicodeAttribute,
+    UnicodeSetAttribute,
+    UTCDateTimeAttribute,
 )
 from aiopynamodb.models import Model
 
@@ -16,6 +21,10 @@ logging.basicConfig()
 log = logging.getLogger("pynamodb")
 log.setLevel(logging.DEBUG)
 log.propagate = True
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 class Thread(Model):
@@ -41,13 +50,13 @@ class AliasedModel(Model):
         table_name = "AliasedModel"
         host = "http://localhost:8000"
 
-    forum_name = UnicodeAttribute(hash_key=True, attr_name='fn')
-    subject = UnicodeAttribute(range_key=True, attr_name='s')
-    views = NumberAttribute(default=0, attr_name='v')
-    replies = NumberAttribute(default=0, attr_name='rp')
-    answered = NumberAttribute(default=0, attr_name='an')
-    tags = UnicodeSetAttribute(attr_name='t')
-    last_post_datetime = UTCDateTimeAttribute(attr_name='lp')
+    forum_name = UnicodeAttribute(hash_key=True, attr_name="fn")
+    subject = UnicodeAttribute(range_key=True, attr_name="s")
+    views = NumberAttribute(default=0, attr_name="v")
+    replies = NumberAttribute(default=0, attr_name="rp")
+    answered = NumberAttribute(default=0, attr_name="an")
+    tags = UnicodeSetAttribute(attr_name="t")
+    last_post_datetime = UTCDateTimeAttribute(attr_name="lp")
 
 
 async def main():
@@ -60,10 +69,7 @@ async def main():
 
     # Create a thread
     thread_item = Thread(
-        'Some Forum',
-        'Some Subject',
-        tags=['foo', 'bar'],
-        last_post_datetime=datetime.now()
+        "Some Forum", "Some Subject", tags=["foo", "bar"], last_post_datetime=utc_now()
     )
 
     # try:
@@ -78,9 +84,9 @@ async def main():
     async with Thread.batch_write() as batch:
         threads = []
         for x in range(100):
-            thread = Thread('forum-{0}'.format(x), 'subject-{0}'.format(x))
-            thread.tags = {'tag1', 'tag2'}
-            thread.last_post_datetime = datetime.now()
+            thread = Thread("forum-{0}".format(x), "subject-{0}".format(x))
+            thread.tags = {"tag1", "tag2"}
+            thread.last_post_datetime = utc_now()
             threads.append(thread)
 
         for thread in threads:
@@ -90,10 +96,10 @@ async def main():
     print(await Thread.count())
 
     # Count based on a filter
-    print(await Thread.count('forum-1'))
+    print(await Thread.count("forum-1"))
 
     # Batch get
-    item_keys = [('forum-{0}'.format(x), 'subject-{0}'.format(x)) for x in range(100)]
+    item_keys = [("forum-{0}".format(x), "subject-{0}".format(x)) for x in range(100)]
     async for item in Thread.batch_get(item_keys):
         print(item)
 
@@ -102,20 +108,19 @@ async def main():
         print(item)
 
     # Query
-    async for item in Thread.query('forum-1', Thread.subject.startswith('subject')):
+    async for item in Thread.query("forum-1", Thread.subject.startswith("subject")):
         print(item)
 
     print("-" * 80)
 
     if not await AliasedModel.exists():
-        await AliasedModel.create_table(read_capacity_units=1, write_capacity_units=1, wait=True)
+        await AliasedModel.create_table(
+            read_capacity_units=1, write_capacity_units=1, wait=True
+        )
 
     # Create an aliased model
     aliased_item = AliasedModel(
-        'Some Forum',
-        'Some Subject',
-        tags=['foo', 'bar'],
-        last_post_datetime=datetime.now()
+        "Some Forum", "Some Subject", tags=["foo", "bar"], last_post_datetime=utc_now()
     )
 
     # Save the aliased model
@@ -125,16 +130,16 @@ async def main():
     async with AliasedModel.batch_write() as batch:
         aliased_items = []
         for x in range(100):
-            aliased_item = AliasedModel('forum-{0}'.format(x), 'subject-{0}'.format(x))
-            aliased_item.tags = {'tag1', 'tag2'}
-            aliased_item.last_post_datetime = datetime.now()
+            aliased_item = AliasedModel("forum-{0}".format(x), "subject-{0}".format(x))
+            aliased_item.tags = {"tag1", "tag2"}
+            aliased_item.last_post_datetime = utc_now()
             aliased_items.append(aliased_item)
 
         for aliased_item in aliased_items:
             await batch.save(aliased_item)
 
     # Batch get
-    item_keys = [('forum-{0}'.format(x), 'subject-{0}'.format(x)) for x in range(100)]
+    item_keys = [("forum-{0}".format(x), "subject-{0}".format(x)) for x in range(100)]
     async for aliased_item in AliasedModel.batch_get(item_keys):
         print("Batch get item: {0}".format(aliased_item))
 
@@ -143,27 +148,33 @@ async def main():
         print("Scanned item: {0}".format(aliased_item))
 
     # Query
-    async for aliased_item in AliasedModel.query('forum-1', AliasedModel.subject.startswith('subject')):
+    async for aliased_item in AliasedModel.query(
+        "forum-1", AliasedModel.subject.startswith("subject")
+    ):
         print("Query using aliased attribute: {0}".format(aliased_item))
 
     # Query with filters
-    async for item in Thread.query('forum-1', filter_condition=(Thread.views == 0) | (Thread.replies == 0)):
+    async for item in Thread.query(
+        "forum-1", filter_condition=(Thread.views == 0) | (Thread.replies == 0)
+    ):
         print("Query result: {0}".format(item))
 
     # Scan with filters
-    async for item in Thread.scan(Thread.subject.startswith('subject') & (Thread.views == 0)):
+    async for item in Thread.scan(
+        Thread.subject.startswith("subject") & (Thread.views == 0)
+    ):
         print("Scanned item: {0} {1}".format(item.subject, item.views))
 
     # Scan with null filter
-    async for item in Thread.scan(Thread.subject.startswith('subject') & Thread.last_post_datetime.does_not_exist()):
+    async for item in Thread.scan(
+        Thread.subject.startswith("subject")
+        & Thread.last_post_datetime.does_not_exist()
+    ):
         print("Scanned item: {0} {1}".format(item.subject, item.views))
 
     # Conditionally save an item
     thread_item = Thread(
-        'Some Forum',
-        'Some Subject',
-        tags=['foo', 'bar'],
-        last_post_datetime=datetime.now()
+        "Some Forum", "Some Subject", tags=["foo", "bar"], last_post_datetime=utc_now()
     )
 
     # DynamoDB will only save the item if forum_name exists
@@ -171,50 +182,54 @@ async def main():
 
     # DynamoDB will update the item, by adding 1 to the views attribute,
     # if the forum_name attribute equals 'Some Forum' or the subject attribute exists
-    print(await thread_item.update(
-        actions=[
-            Thread.views.add(1)
-        ],
-        condition=(
-                (Thread.forum_name == 'Some Forum') | Thread.subject.exists()
+    print(
+        await thread_item.update(
+            actions=[Thread.views.add(1)],
+            condition=((Thread.forum_name == "Some Forum") | Thread.subject.exists()),
         )
-    ))
+    )
 
     # DynamoDB will atomically update the attributes `replies` (increase value by 1),
     # and `last_post_datetime` (set value to the current datetime)
-    print(await thread_item.update(actions=[
-        Thread.replies.add(1),
-        Thread.last_post_datetime.set(datetime.now()),
-    ]))
+    print(
+        await thread_item.update(
+            actions=[
+                Thread.replies.add(1),
+                Thread.last_post_datetime.set(utc_now()),
+            ]
+        )
+    )
 
     # Remove an item's attribute
-    print(await thread_item.update(actions=[
-        Thread.tags.remove()
-    ]))
+    print(await thread_item.update(actions=[Thread.tags.remove()]))
 
     # Update list attribute
-    print(await thread_item.update(actions=[
-        Thread.notes.set(
-            Thread.notes.append(["new note"])
+    print(
+        await thread_item.update(
+            actions=[Thread.notes.set(Thread.notes.append(["new note"]))]
         )
-    ]))
+    )
 
     # DynamoDB will delete the item, only if the views attribute is equal to one
     try:
         print(await thread_item.delete(Thread.views == 1))
-    except:
+    except:  # noqa: E722
         pass
 
     # Backup/restore example
     # Print the size of the table (note that this is async/eventually consistent)
-    print("Table size: {}".format((await Thread.describe_table()).get('ItemCount')))
+    print("Table size: {}".format((await Thread.describe_table()).get("ItemCount")))
 
     # Optionally Delete all table items
     # Commented out for safety
     # for item in Thread.scan():
     #     item.delete()
-    print("Table size: {}".format((await Thread.describe_table()).get('ItemCount')))
+    print("Table size: {}".format((await Thread.describe_table()).get("ItemCount")))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    asyncio.run(main())
+
+
+if __name__ == "__main__":
     asyncio.run(main())

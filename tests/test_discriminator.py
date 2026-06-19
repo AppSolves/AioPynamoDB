@@ -9,7 +9,8 @@ from aiopynamodb.attributes import UnicodeAttribute
 from aiopynamodb.models import Model
 
 
-class_name = lambda cls: cls.__name__
+def class_name(cls):
+    return cls.__name__
 
 
 class TypedValue(MapAttribute):

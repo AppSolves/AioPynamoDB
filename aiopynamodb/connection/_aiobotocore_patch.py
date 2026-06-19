@@ -1,0 +1,101 @@
+def _patch_aiobotocore() -> None:
+    import inspect
+    from binascii import crc32
+
+    import aiobotocore.endpoint
+    import aiobotocore.retries.special
+    import aiobotocore.retryhandler
+    from aiobotocore.endpoint import HttpxStreamingBody, StreamingBody  # type: ignore
+    from aiobotocore.retryhandler import ChecksumError, logger  # type: ignore
+
+    try:
+        import httpx
+    except ImportError:
+        httpx = None
+
+    async def _fixed_check_response(self, attempt_number, response):
+        http_response = response[0]
+        expected_crc = http_response.headers.get(self._header_name)
+        if expected_crc is None:
+            logger.debug(
+                "crc32 check skipped, the %s header is not in the http response.",
+                self._header_name,
+            )
+        else:
+            response_content = http_response.content
+            if inspect.isawaitable(response_content):
+                data_buf = await response_content
+            else:
+                data_buf = response_content
+
+            actual_crc32 = crc32(data_buf) & 0xFFFFFFFF
+            if actual_crc32 != int(expected_crc):
+                logger.debug(
+                    "retry needed: crc32 check failed, expected != actual: %s != %s",
+                    int(expected_crc),
+                    actual_crc32,
+                )
+                raise ChecksumError(
+                    checksum_type="crc32",
+                    expected_checksum=int(expected_crc),
+                    actual_checksum=actual_crc32,
+                )
+
+    async def convert_to_response_dict(http_response, operation_model):
+        response_dict = {
+            "headers": http_response.headers,
+            "status_code": http_response.status_code,
+            "context": {
+                "operation_name": operation_model.name,
+            },
+        }
+        if response_dict["status_code"] >= 300:
+            response_content = http_response.content
+            if inspect.isawaitable(response_content):
+                response_dict["body"] = await response_content
+            else:
+                response_dict["body"] = response_content
+        elif operation_model.has_event_stream_output:
+            response_dict["body"] = http_response.raw
+        elif operation_model.has_streaming_output:
+            if httpx and isinstance(http_response.raw, httpx.Response):
+                response_dict["body"] = HttpxStreamingBody(http_response.raw)
+            else:
+                length = response_dict["headers"].get("content-length")
+                response_dict["body"] = StreamingBody(http_response.raw, length)
+        else:
+            response_content = http_response.content
+            if inspect.isawaitable(response_content):
+                response_dict["body"] = await response_content
+            else:
+                response_dict["body"] = response_content
+        return response_dict
+
+    async def is_retryable(self, context):
+        service_name = context.operation_model.service_model.service_name
+        if service_name != self._SERVICE_NAME:
+            return False
+        if context.http_response is None:
+            return False
+        checksum = context.http_response.headers.get(self._CHECKSUM_HEADER)
+        if checksum is None:
+            return False
+        response_content = context.http_response.content
+        if inspect.isawaitable(response_content):
+            content = await response_content
+        else:
+            content = response_content
+        actual_crc32 = crc32(content) & 0xFFFFFFFF
+        if actual_crc32 != int(checksum):
+            logger.debug(
+                "DynamoDB crc32 checksum does not match, expected: %s, actual: %s",
+                checksum,
+                actual_crc32,
+            )
+            return True
+
+        return False
+
+    aiobotocore.retryhandler.AioCRC32Checker._check_response = _fixed_check_response
+    aiobotocore.endpoint.convert_to_response_dict = convert_to_response_dict
+    aiobotocore.retries.special.AioRetryDDBChecksumError.is_retryable = is_retryable
