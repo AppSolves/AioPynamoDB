@@ -45,7 +45,6 @@ class AttributeTestMapAttribute(MapAttribute):
 
 
 class AttributeTestModel(Model):
-
     class Meta:
         host = "http://localhost:8000"
         table_name = "test"
@@ -991,7 +990,6 @@ class TestMapAttribute:
 
 
 class TestDynamicMapAttribute:
-
     class CreatedAtTestModel(Model):
         class CreatedAtMap(DynamicMapAttribute):
             created_at = UTCDateTimeAttribute()
@@ -1033,7 +1031,6 @@ class TestDynamicMapAttribute:
 
 
 class TestListAttribute:
-
     def test_roundtrip_untyped(self) -> None:
         string_list_attribute = ListAttribute()
         values = [
@@ -1101,7 +1098,6 @@ class TestListAttribute:
 
 
 class TestMapAndListAttribute:
-
     def test_map_of_list(self):
         grocery_list = {
             "fruit": ["apple", "pear", 32],

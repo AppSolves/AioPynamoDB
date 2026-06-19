@@ -3,21 +3,22 @@ import logging
 import os
 import warnings
 from os import getenv
-
 from typing import Any
 
 log = logging.getLogger(__name__)
 
 default_settings_dict = {
-    'connect_timeout_seconds': 15,
-    'read_timeout_seconds': 30,
-    'max_retry_attempts': 3,
-    'region': None,
-    'max_pool_connections': 10,
-    'extra_headers': None,
+    "connect_timeout_seconds": 15,
+    "read_timeout_seconds": 30,
+    "max_retry_attempts": 3,
+    "region": None,
+    "max_pool_connections": 10,
+    "extra_headers": None,
 }
 
-OVERRIDE_SETTINGS_PATH = getenv('AIOPYNAMODB_CONFIG', '/etc/aiopynamodb/global_default_settings.py')
+OVERRIDE_SETTINGS_PATH = getenv(
+    "AIOPYNAMODB_CONFIG", "/etc/aiopynamodb/global_default_settings.py"
+)
 
 
 def _load_module(name, path):
@@ -30,13 +31,25 @@ def _load_module(name, path):
 
 override_settings = {}
 if os.path.isfile(OVERRIDE_SETTINGS_PATH):
-    override_settings = _load_module('__aiopynamodb_override_settings__', OVERRIDE_SETTINGS_PATH)
-    if hasattr(override_settings, 'session_cls') or hasattr(override_settings, 'request_timeout_seconds'):
-        warnings.warn("The `session_cls` and `request_timeout_second` options are no longer supported")
-    log.info('Override settings for aiopynamodb available {}'.format(OVERRIDE_SETTINGS_PATH))
+    override_settings = _load_module(
+        "__aiopynamodb_override_settings__", OVERRIDE_SETTINGS_PATH
+    )
+    if hasattr(override_settings, "session_cls") or hasattr(
+        override_settings, "request_timeout_seconds"
+    ):
+        warnings.warn(
+            "The `session_cls` and `request_timeout_second` options are no longer supported"
+        )
+    log.info(
+        "Override settings for aiopynamodb available {}".format(OVERRIDE_SETTINGS_PATH)
+    )
 else:
-    log.info('Override settings for aiopynamodb not available {}'.format(OVERRIDE_SETTINGS_PATH))
-    log.info('Using Default settings value')
+    log.info(
+        "Override settings for aiopynamodb not available {}".format(
+            OVERRIDE_SETTINGS_PATH
+        )
+    )
+    log.info("Using Default settings value")
 
 
 def get_settings_value(key: str) -> Any:

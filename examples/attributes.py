@@ -1,6 +1,7 @@
 """
 A PynamoDB example using a custom attribute
 """
+
 import asyncio
 import pickle
 from typing import Any
@@ -25,6 +26,7 @@ class PickleAttribute(Attribute[object]):
     This class will serializer/deserialize any picklable Python object.
     The value will be stored as a binary attribute in DynamoDB.
     """
+
     attr_type = BINARY
 
     def serialize(self, value: Any) -> bytes:
@@ -40,8 +42,8 @@ class CustomAttributeModel(Model):
     """
 
     class Meta:
-        host = 'http://localhost:8000'
-        table_name = 'custom_attr'
+        host = "http://localhost:8000"
+        table_name = "custom_attr"
         read_capacity_units = 1
         write_capacity_units = 1
 
@@ -55,15 +57,15 @@ async def main():
         await CustomAttributeModel.create_table(wait=True)
 
     instance = CustomAttributeModel()
-    instance.obj = Color('red')
-    instance.id = 'red'
+    instance.obj = Color("red")
+    instance.id = "red"
     await instance.save()
-    print('instance', instance)
+    print("instance", instance)
 
-    instance = await CustomAttributeModel.get('red')
-    print('instance', instance)
-    print('instance.obj', instance.obj)
+    instance = await CustomAttributeModel.get("red")
+    print("instance", instance)
+    print("instance.obj", instance.obj)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

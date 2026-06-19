@@ -3,6 +3,7 @@ from typing_extensions import assert_type
 
 def test_transact_write() -> None:
     from aiopynamodb.transactions import TransactWrite
+
     with TransactWrite() as tx:
         assert_type(tx, TransactWrite)
 

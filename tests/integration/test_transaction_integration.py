@@ -6,7 +6,11 @@ import pytest
 import pytest_asyncio
 
 from aiopynamodb.attributes import (
-    NumberAttribute, UnicodeAttribute, UTCDateTimeAttribute, BooleanAttribute, VersionAttribute
+    NumberAttribute,
+    UnicodeAttribute,
+    UTCDateTimeAttribute,
+    BooleanAttribute,
+    VersionAttribute,
 )
 from aiopynamodb.connection import Connection
 from aiopynamodb.constants import ALL_OLD
@@ -15,12 +19,12 @@ from aiopynamodb.exceptions import DoesNotExist, TransactWriteError, InvalidStat
 from aiopynamodb.models import Model
 from aiopynamodb.transactions import TransactGet, TransactWrite
 
-IDEMPOTENT_PARAMETER_MISMATCH = 'IdempotentParameterMismatchException'
-PROVISIONED_THROUGHPUT_EXCEEDED = 'ProvisionedThroughputExceededException'
-RESOURCE_NOT_FOUND = 'ResourceNotFoundException'
-TRANSACTION_CANCELLED = 'TransactionCanceledException'
-TRANSACTION_IN_PROGRESS = 'TransactionInProgressException'
-VALIDATION_EXCEPTION = 'ValidationException'
+IDEMPOTENT_PARAMETER_MISMATCH = "IdempotentParameterMismatchException"
+PROVISIONED_THROUGHPUT_EXCEEDED = "ProvisionedThroughputExceededException"
+RESOURCE_NOT_FOUND = "ResourceNotFoundException"
+TRANSACTION_CANCELLED = "TransactionCanceledException"
+TRANSACTION_IN_PROGRESS = "TransactionInProgressException"
+VALIDATION_EXCEPTION = "ValidationException"
 
 
 def utc_now():
@@ -29,16 +33,16 @@ def utc_now():
 
 class User(Model):
     class Meta:
-        region = 'us-east-1'
-        table_name = 'user'
+        region = "us-east-1"
+        table_name = "user"
 
     user_id = NumberAttribute(hash_key=True)
 
 
 class BankStatement(Model):
     class Meta:
-        region = 'us-east-1'
-        table_name = 'statement'
+        region = "us-east-1"
+        table_name = "statement"
 
     user_id = NumberAttribute(hash_key=True)
     balance = NumberAttribute(default=0)
@@ -47,8 +51,8 @@ class BankStatement(Model):
 
 class LineItem(Model):
     class Meta:
-        region = 'us-east-1'
-        table_name = 'line-item'
+        region = "us-east-1"
+        table_name = "line-item"
 
     user_id = NumberAttribute(hash_key=True)
     created_at = UTCDateTimeAttribute(range_key=True, default=utc_now)
@@ -58,29 +62,23 @@ class LineItem(Model):
 
 class DifferentRegion(Model):
     class Meta:
-        region = 'us-east-2'
-        table_name = 'different-region'
+        region = "us-east-2"
+        table_name = "different-region"
 
     entry_index = NumberAttribute(hash_key=True)
 
 
 class Foo(Model):
     class Meta:
-        region = 'us-east-1'
-        table_name = 'foo'
+        region = "us-east-1"
+        table_name = "foo"
 
     bar = NumberAttribute(hash_key=True)
     star = UnicodeAttribute(null=True)
     version = VersionAttribute()
 
 
-TEST_MODELS = [
-    BankStatement,
-    DifferentRegion,
-    LineItem,
-    User,
-    Foo
-]
+TEST_MODELS = [BankStatement, DifferentRegion, LineItem, User, Foo]
 
 
 @pytest_asyncio.fixture
@@ -94,11 +92,7 @@ async def connection(ddb_url):
 async def create_tables(ddb_url):
     for m in TEST_MODELS:
         m.Meta.host = ddb_url
-        await m.create_table(
-            read_capacity_units=10,
-            write_capacity_units=10,
-            wait=True
-        )
+        await m.create_table(read_capacity_units=10, write_capacity_units=10, wait=True)
 
     yield
 
@@ -113,13 +107,17 @@ async def create_tables(ddb_url):
 async def test_transact_write__error__idempotent_parameter_mismatch(connection):
     client_token = str(uuid.uuid4())
 
-    async with TransactWrite(connection=connection, client_request_token=client_token) as transaction:
+    async with TransactWrite(
+        connection=connection, client_request_token=client_token
+    ) as transaction:
         transaction.save(User(1))
         transaction.save(User(2))
 
     with pytest.raises(TransactWriteError) as exc_info:
         # committing the first time, then adding more info and committing again
-        async with TransactWrite(connection=connection, client_request_token=client_token) as transaction:
+        async with TransactWrite(
+            connection=connection, client_request_token=client_token
+        ) as transaction:
             transaction.save(User(3))
     assert exc_info.value.cause_response_code == IDEMPOTENT_PARAMETER_MISMATCH
     assert isinstance(exc_info.value.cause, botocore.exceptions.ClientError)
@@ -153,7 +151,9 @@ async def test_transact_write__error__different_regions(connection):
 
 @pytest.mark.ddblocal
 @pytest.mark.asyncio
-async def test_transact_write__error__transaction_cancelled__condition_check_failure(connection):
+async def test_transact_write__error__transaction_cancelled__condition_check_failure(
+    connection,
+):
     # create a users and a bank statements for them
     await User(1).save()
     await BankStatement(1).save()
@@ -162,12 +162,18 @@ async def test_transact_write__error__transaction_cancelled__condition_check_fai
     with pytest.raises(TransactWriteError) as exc_info:
         async with TransactWrite(connection=connection) as transaction:
             transaction.save(User(1), condition=(User.user_id.does_not_exist()))
-            transaction.save(BankStatement(1), condition=(BankStatement.user_id.does_not_exist()))
+            transaction.save(
+                BankStatement(1), condition=(BankStatement.user_id.does_not_exist())
+            )
     assert exc_info.value.cause_response_code == TRANSACTION_CANCELLED
-    assert 'ConditionalCheckFailed' in exc_info.value.cause_response_message
+    assert "ConditionalCheckFailed" in exc_info.value.cause_response_message
     assert exc_info.value.cancellation_reasons == [
-        CancellationReason(code='ConditionalCheckFailed', message='The conditional request failed'),
-        CancellationReason(code='ConditionalCheckFailed', message='The conditional request failed'),
+        CancellationReason(
+            code="ConditionalCheckFailed", message="The conditional request failed"
+        ),
+        CancellationReason(
+            code="ConditionalCheckFailed", message="The conditional request failed"
+        ),
     ]
     assert isinstance(exc_info.value.cause, botocore.exceptions.ClientError)
     assert User.Meta.table_name in exc_info.value.cause.MSG_TEMPLATE
@@ -176,25 +182,36 @@ async def test_transact_write__error__transaction_cancelled__condition_check_fai
 
 @pytest.mark.ddblocal
 @pytest.mark.asyncio
-async def test_transact_write__error__transaction_cancelled__condition_check_failure__return_all_old(connection):
+async def test_transact_write__error__transaction_cancelled__condition_check_failure__return_all_old(
+    connection,
+):
     # create a users and a bank statements for them
     await User(1).save()
 
     # attempt to do this as a transaction with the condition that they don't already exist
     with pytest.raises(TransactWriteError) as exc_info:
         async with TransactWrite(connection=connection) as transaction:
-            transaction.save(User(1), condition=(User.user_id.does_not_exist()), return_values=ALL_OLD)
+            transaction.save(
+                User(1),
+                condition=(User.user_id.does_not_exist()),
+                return_values=ALL_OLD,
+            )
     assert exc_info.value.cause_response_code == TRANSACTION_CANCELLED
-    assert 'ConditionalCheckFailed' in exc_info.value.cause_response_message
+    assert "ConditionalCheckFailed" in exc_info.value.cause_response_message
     assert exc_info.value.cancellation_reasons == [
-        CancellationReason(code='ConditionalCheckFailed', message='The conditional request failed',
-                           raw_item=User(1).to_dynamodb_dict()),
+        CancellationReason(
+            code="ConditionalCheckFailed",
+            message="The conditional request failed",
+            raw_item=User(1).to_dynamodb_dict(),
+        ),
     ]
 
 
 @pytest.mark.ddblocal
 @pytest.mark.asyncio
-async def test_transact_write__error__transaction_cancelled__partial_failure(connection):
+async def test_transact_write__error__transaction_cancelled__partial_failure(
+    connection,
+):
     await User(2).delete()
     await BankStatement(2).save()
 
@@ -202,11 +219,15 @@ async def test_transact_write__error__transaction_cancelled__partial_failure(con
     with pytest.raises(TransactWriteError) as exc_info:
         async with TransactWrite(connection=connection) as transaction:
             transaction.save(User(2), condition=(User.user_id.does_not_exist()))
-            transaction.save(BankStatement(2), condition=(BankStatement.user_id.does_not_exist()))
+            transaction.save(
+                BankStatement(2), condition=(BankStatement.user_id.does_not_exist())
+            )
     assert exc_info.value.cause_response_code == TRANSACTION_CANCELLED
     assert exc_info.value.cancellation_reasons == [
         None,
-        CancellationReason(code='ConditionalCheckFailed', message='The conditional request failed'),
+        CancellationReason(
+            code="ConditionalCheckFailed", message="The conditional request failed"
+        ),
     ]
 
 
@@ -218,8 +239,12 @@ async def test_transact_write__error__multiple_operations_on_same_record(connect
     # attempt to do a transaction with multiple operations on the same record
     with pytest.raises(TransactWriteError) as exc_info:
         async with TransactWrite(connection=connection) as transaction:
-            transaction.condition_check(BankStatement, 1, condition=(BankStatement.user_id.exists()))
-            transaction.update(BankStatement(1), actions=[(BankStatement.balance.add(10))])
+            transaction.condition_check(
+                BankStatement, 1, condition=(BankStatement.user_id.exists())
+            )
+            transaction.update(
+                BankStatement(1), actions=[(BankStatement.balance.add(10))]
+            )
     assert exc_info.value.cause_response_code == VALIDATION_EXCEPTION
     assert isinstance(exc_info.value.cause, botocore.exceptions.ClientError)
     assert BankStatement.Meta.table_name in exc_info.value.cause.MSG_TEMPLATE
@@ -287,12 +312,12 @@ async def test_transact_write(connection):
         # let the users send money to one another
         # create a credit line item to user 1's account
         transaction.save(
-            LineItem(user_id=1, amount=50, currency='USD'),
+            LineItem(user_id=1, amount=50, currency="USD"),
             condition=(LineItem.user_id.does_not_exist()),
         )
         # create a debit to user 2's account
         transaction.save(
-            LineItem(user_id=2, amount=-50, currency='USD'),
+            LineItem(user_id=2, amount=-50, currency="USD"),
             condition=(LineItem.user_id.does_not_exist()),
         )
 
@@ -302,7 +327,7 @@ async def test_transact_write(connection):
         transaction.update(
             statement2,
             actions=[BankStatement.balance.add(-50)],
-            condition=(BankStatement.balance >= 50)
+            condition=(BankStatement.balance >= 50),
         )
 
     await statement1.refresh()
@@ -321,13 +346,16 @@ async def test_transact_write__one_of_each(connection):
     async with TransactWrite(connection=connection) as transaction:
         transaction.condition_check(User, 1, condition=(User.user_id.exists()))
         transaction.delete(User(2))
-        transaction.save(LineItem(4, amount=100, currency='USD'), condition=(LineItem.user_id.does_not_exist()))
+        transaction.save(
+            LineItem(4, amount=100, currency="USD"),
+            condition=(LineItem.user_id.does_not_exist()),
+        )
         transaction.update(
             statement,
             actions=[
                 BankStatement.active.set(False),
                 BankStatement.balance.set(0),
-            ]
+            ],
         )
 
     # confirming transaction correct and successful
@@ -335,10 +363,12 @@ async def test_transact_write__one_of_each(connection):
     with pytest.raises(DoesNotExist):
         await User.get(2)
 
-    new_line_item = await anext(LineItem.query(4, scan_index_forward=False, limit=1), None)
+    new_line_item = await anext(
+        LineItem.query(4, scan_index_forward=False, limit=1), None
+    )
     assert new_line_item
     assert new_line_item.amount == 100
-    assert new_line_item.currency == 'USD'
+    assert new_line_item.currency == "USD"
 
     await statement.refresh()
     assert not statement.active
@@ -350,7 +380,7 @@ async def test_transact_write__one_of_each(connection):
 async def test_transaction_write_with_version_attribute(connection):
     foo1 = Foo(1)
     await foo1.save()
-    foo2 = Foo(2, star='bar')
+    foo2 = Foo(2, star="bar")
     await foo2.save()
     foo3 = Foo(3)
     await foo3.save()
@@ -367,13 +397,13 @@ async def test_transaction_write_with_version_attribute(connection):
         transaction.update(
             foo3,
             actions=[
-                Foo.star.set('birdistheword'),
-            ]
+                Foo.star.set("birdistheword"),
+            ],
         )
         transaction.update(
             foo42,
             actions=[
-                Foo.star.set('last write wins'),
+                Foo.star.set("last write wins"),
             ],
             add_version_condition=False,
         )
@@ -386,14 +416,14 @@ async def test_transaction_write_with_version_attribute(connection):
     assert (await Foo.get(4)).version == 1
     foo42 = await Foo.get(42)
     assert foo42.version == foo42_dup.version + 1 == 3  # ensure version is incremented
-    assert foo42.star == 'last write wins'  # ensure last write wins
+    assert foo42.star == "last write wins"  # ensure last write wins
 
 
 @pytest.mark.ddblocal
 @pytest.mark.asyncio
 async def test_transaction_get_with_version_attribute(connection):
     await Foo(11).save()
-    await Foo(12, star='bar').save()
+    await Foo(12, star="bar").save()
 
     async with TransactGet(connection=connection) as transaction:
         foo1_future = transaction.get(Foo, 11)
@@ -403,7 +433,7 @@ async def test_transaction_get_with_version_attribute(connection):
     assert foo1.version == 1
     foo2 = foo2_future.get()
     assert foo2.version == 1
-    assert foo2.star == 'bar'
+    assert foo2.star == "bar"
 
 
 @pytest.mark.ddblocal
@@ -419,7 +449,7 @@ async def test_transaction_write_with_version_attribute_condition_failure(connec
             transaction.save(Foo(21))
     assert exc_info.value.cause_response_code == TRANSACTION_CANCELLED
     assert len(exc_info.value.cancellation_reasons) == 1
-    assert exc_info.value.cancellation_reasons[0].code == 'ConditionalCheckFailed'
+    assert exc_info.value.cancellation_reasons[0].code == "ConditionalCheckFailed"
     assert isinstance(exc_info.value.cause, botocore.exceptions.ClientError)
     assert Foo.Meta.table_name in exc_info.value.cause.MSG_TEMPLATE
 
@@ -428,12 +458,12 @@ async def test_transaction_write_with_version_attribute_condition_failure(connec
             transaction.update(
                 foo2,
                 actions=[
-                    Foo.star.set('birdistheword'),
-                ]
+                    Foo.star.set("birdistheword"),
+                ],
             )
     assert exc_info.value.cause_response_code == TRANSACTION_CANCELLED
     assert len(exc_info.value.cancellation_reasons) == 1
-    assert exc_info.value.cancellation_reasons[0].code == 'ConditionalCheckFailed'
+    assert exc_info.value.cancellation_reasons[0].code == "ConditionalCheckFailed"
     assert Foo.Meta.table_name in exc_info.value.cause.MSG_TEMPLATE
     # Version attribute is not updated on failure.
     assert foo2.version is None
@@ -443,5 +473,5 @@ async def test_transaction_write_with_version_attribute_condition_failure(connec
             transaction.delete(foo2)
     assert exc_info.value.cause_response_code == TRANSACTION_CANCELLED
     assert len(exc_info.value.cancellation_reasons) == 1
-    assert exc_info.value.cancellation_reasons[0].code == 'ConditionalCheckFailed'
+    assert exc_info.value.cancellation_reasons[0].code == "ConditionalCheckFailed"
     assert Foo.Meta.table_name in exc_info.value.cause.MSG_TEMPLATE

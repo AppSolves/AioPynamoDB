@@ -1,10 +1,17 @@
 import asyncio
 from typing import Any, Callable, Dict, Iterable, AsyncIterator, Optional, TypeVar
 
-from aiopynamodb.constants import (CAMEL_COUNT, ITEMS, LAST_EVALUATED_KEY, SCANNED_COUNT,
-                                CONSUMED_CAPACITY, TOTAL, CAPACITY_UNITS)
+from aiopynamodb.constants import (
+    CAMEL_COUNT,
+    ITEMS,
+    LAST_EVALUATED_KEY,
+    SCANNED_COUNT,
+    CONSUMED_CAPACITY,
+    TOTAL,
+    CAPACITY_UNITS,
+)
 
-_T = TypeVar('_T')
+_T = TypeVar("_T")
 
 
 class _AsyncioTimeModule:
@@ -52,8 +59,11 @@ class RateLimiter:
         """
         Sleeps the appropriate amount of time to follow the rate limit restriction
         """
-        sleep_time = max(0, self._consumed / float(self.rate_limit) -
-                         (self._time_module.get_event_loop().time() - self._time_of_last_acquire))
+        sleep_time = max(
+            0,
+            self._consumed / float(self.rate_limit)
+            - (self._time_module.get_event_loop().time() - self._time_of_last_acquire),
+        )
         if sleep_time > 0:
             await self._time_module.sleep(sleep_time)
         self._consumed = 0
@@ -85,7 +95,7 @@ class PageIterator(AsyncIterator[_T]):
         self._operation = operation
         self._args = args
         self._kwargs = kwargs
-        self._last_evaluated_key = kwargs.get('exclusive_start_key')
+        self._last_evaluated_key = kwargs.get("exclusive_start_key")
         self._is_last_page = False
         self._total_scanned_count = 0
         self._rate_limiter = None
@@ -99,11 +109,11 @@ class PageIterator(AsyncIterator[_T]):
         if self._is_last_page:
             raise StopAsyncIteration()
 
-        self._kwargs['exclusive_start_key'] = self._last_evaluated_key
+        self._kwargs["exclusive_start_key"] = self._last_evaluated_key
 
         if self._rate_limiter:
             await self._rate_limiter.acquire()
-            self._kwargs['return_consumed_capacity'] = TOTAL
+            self._kwargs["return_consumed_capacity"] = TOTAL
 
         page = await self._operation(*self._args, **self._kwargs)
         self._last_evaluated_key = page.get(LAST_EVALUATED_KEY)
@@ -124,15 +134,15 @@ class PageIterator(AsyncIterator[_T]):
 
         # Use the table meta data to determine the key attributes
         table_meta = self._operation.__self__.get_meta_table()  # type: ignore
-        return table_meta.get_key_names(self._kwargs.get('index_name'))
+        return table_meta.get_key_names(self._kwargs.get("index_name"))
 
     @property
     def page_size(self) -> Optional[int]:
-        return self._kwargs.get('limit')
+        return self._kwargs.get("limit")
 
     @page_size.setter
     def page_size(self, page_size: int) -> None:
-        self._kwargs['limit'] = page_size
+        self._kwargs["limit"] = page_size
 
     @property
     def last_evaluated_key(self) -> Optional[Dict[str, Dict[str, Any]]]:

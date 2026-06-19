@@ -2,6 +2,7 @@
 AioPynamoDB Connection classes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+
 from typing import Any, Dict, Mapping, Optional, Sequence
 
 from aiopynamodb.connection.base import Connection, MetaTable
@@ -32,16 +33,18 @@ class TableConnection:
         meta_table: Optional[MetaTable] = None,
     ) -> None:
         self.table_name = table_name
-        self.connection = Connection(region=region,
-                                     host=host,
-                                     connect_timeout_seconds=connect_timeout_seconds,
-                                     read_timeout_seconds=read_timeout_seconds,
-                                     max_retry_attempts=max_retry_attempts,
-                                     max_pool_connections=max_pool_connections,
-                                     extra_headers=extra_headers,
-                                     aws_access_key_id=aws_access_key_id,
-                                     aws_secret_access_key=aws_secret_access_key,
-                                     aws_session_token=aws_session_token)
+        self.connection = Connection(
+            region=region,
+            host=host,
+            connect_timeout_seconds=connect_timeout_seconds,
+            read_timeout_seconds=read_timeout_seconds,
+            max_retry_attempts=max_retry_attempts,
+            max_pool_connections=max_pool_connections,
+            extra_headers=extra_headers,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_session_token=aws_session_token,
+        )
 
         if meta_table is not None:
             self.connection.add_meta_table(meta_table)
@@ -84,7 +87,7 @@ class TableConnection:
             return_values=return_values,
             return_consumed_capacity=return_consumed_capacity,
             return_item_collection_metrics=return_item_collection_metrics,
-            return_values_on_condition_failure=return_values_on_condition_failure
+            return_values_on_condition_failure=return_values_on_condition_failure,
         )
 
     async def delete_item(
@@ -302,7 +305,8 @@ class TableConnection:
             self.table_name,
             read_capacity_units=read_capacity_units,
             write_capacity_units=write_capacity_units,
-            global_secondary_index_updates=global_secondary_index_updates)
+            global_secondary_index_updates=global_secondary_index_updates,
+        )
 
     async def create_table(
         self,
@@ -329,5 +333,5 @@ class TableConnection:
             local_secondary_indexes=local_secondary_indexes,
             stream_specification=stream_specification,
             billing_mode=billing_mode,
-            tags=tags
+            tags=tags,
         )

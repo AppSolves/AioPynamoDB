@@ -1,15 +1,20 @@
-from aiopynamodb.attributes import ListAttribute, MapAttribute, NumberAttribute, UnicodeAttribute
+from aiopynamodb.attributes import (
+    ListAttribute,
+    MapAttribute,
+    NumberAttribute,
+    UnicodeAttribute,
+)
 from aiopynamodb.models import Model
 
 
 class Location(MapAttribute):
-    lat = NumberAttribute(attr_name='latitude')
-    lng = NumberAttribute(attr_name='longitude')
+    lat = NumberAttribute(attr_name="latitude")
+    lng = NumberAttribute(attr_name="longitude")
     name = UnicodeAttribute()
 
 
 class Person(MapAttribute):
-    fname = UnicodeAttribute(attr_name='firstName')
+    fname = UnicodeAttribute(attr_name="firstName")
     lname = UnicodeAttribute()
     age = NumberAttribute()
 
@@ -22,7 +27,7 @@ class OfficeEmployeeMap(MapAttribute):
 
 class Office(Model):
     class Meta:
-        table_name = 'OfficeModel'
+        table_name = "OfficeModel"
         host = "http://localhost:8000"
 
     office_id = NumberAttribute(hash_key=True)

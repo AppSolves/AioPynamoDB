@@ -2,15 +2,36 @@ from typing import Any, Dict, List, Optional, Union
 from typing import TYPE_CHECKING
 
 from aiopynamodb.constants import (
-    ATTRIBUTE_TYPES, BINARY_SET, LIST, MAP, NUMBER, NUMBER_SET, STRING, STRING_SET
+    ATTRIBUTE_TYPES,
+    BINARY_SET,
+    LIST,
+    MAP,
+    NUMBER,
+    NUMBER_SET,
+    STRING,
+    STRING_SET,
 )
 from aiopynamodb.expressions.condition import (
-    BeginsWith, Between, Comparison, Contains, Exists, In, IsType, NotExists
+    BeginsWith,
+    Between,
+    Comparison,
+    Contains,
+    Exists,
+    In,
+    IsType,
+    NotExists,
 )
 from aiopynamodb.expressions.update import (
-    AddAction, DeleteAction, RemoveAction, SetAction
+    AddAction,
+    DeleteAction,
+    RemoveAction,
+    SetAction,
 )
-from aiopynamodb.expressions.util import get_path_segments, get_value_placeholder, substitute_names
+from aiopynamodb.expressions.util import (
+    get_path_segments,
+    get_value_placeholder,
+    substitute_names,
+)
 
 if TYPE_CHECKING:
     from aiopynamodb.attributes import Attribute
@@ -20,7 +41,8 @@ class _Operand:
     """
     Operand is the base class for objects that can be operands in Condition and Update Expressions.
     """
-    format_string = ''
+
+    format_string = ""
     attr_type: Optional[str] = None
 
     def __init__(self, *values: Any) -> None:
@@ -30,22 +52,30 @@ class _Operand:
         return self.format_string.format(*self.values)
 
     def _equals_to(self, other: Any) -> bool:
-        return (
-            type(self) is type(other)
-            and self.values == other.values
-        )
+        return type(self) is type(other) and self.values == other.values
 
-    def serialize(self, placeholder_names: Dict[str, str], expression_attribute_values: Dict[str, str]) -> str:
-        values = [self._serialize_value(value, placeholder_names, expression_attribute_values) for value in self.values]
+    def serialize(
+        self,
+        placeholder_names: Dict[str, str],
+        expression_attribute_values: Dict[str, str],
+    ) -> str:
+        values = [
+            self._serialize_value(value, placeholder_names, expression_attribute_values)
+            for value in self.values
+        ]
         return self.format_string.format(*values)
 
     def _serialize_value(self, value, placeholder_names, expression_attribute_values):
         return value.serialize(placeholder_names, expression_attribute_values)
 
-    def _to_operand(self, value: Union['_Operand', 'Attribute', Any]):
+    def _to_operand(self, value: Union["_Operand", "Attribute", Any]):
         if isinstance(value, _Operand):
             return value
-        from aiopynamodb.attributes import Attribute, MapAttribute  # prevent circular import -- Attribute imports Path
+        from aiopynamodb.attributes import (
+            Attribute,
+            MapAttribute,
+        )  # prevent circular import -- Attribute imports Path
+
         if isinstance(value, MapAttribute) and value._is_attribute_container():
             return self._to_value(value)
         return Path(value) if isinstance(value, Attribute) else self._to_value(value)
@@ -55,7 +85,9 @@ class _Operand:
 
     def _type_check(self, *types):
         if self.attr_type and self.attr_type not in types:
-            raise ValueError("The data type of '{}' must be one of {}".format(self, list(types)))
+            raise ValueError(
+                "The data type of '{}' must be one of {}".format(self, list(types))
+            )
 
 
 class _ConditionOperand(_Operand):
@@ -64,22 +96,22 @@ class _ConditionOperand(_Operand):
     """
 
     def __eq__(self, other: Any) -> Comparison:  # type: ignore[override]
-        return Comparison('=', self, self._to_operand(other))
+        return Comparison("=", self, self._to_operand(other))
 
     def __ne__(self, other: Any) -> Comparison:  # type: ignore[override]
-        return Comparison('<>', self, self._to_operand(other))
+        return Comparison("<>", self, self._to_operand(other))
 
     def __lt__(self, other: Any) -> Comparison:
-        return Comparison('<', self, self._to_operand(other))
+        return Comparison("<", self, self._to_operand(other))
 
     def __le__(self, other: Any) -> Comparison:
-        return Comparison('<=', self, self._to_operand(other))
+        return Comparison("<=", self, self._to_operand(other))
 
     def __gt__(self, other: Any) -> Comparison:
-        return Comparison('>', self, self._to_operand(other))
+        return Comparison(">", self, self._to_operand(other))
 
     def __ge__(self, other: Any) -> Comparison:
-        return Comparison('>=', self, self._to_operand(other))
+        return Comparison(">=", self, self._to_operand(other))
 
     def between(self, lower: Any, upper: Any) -> Between:
         return Between(self, self._to_operand(lower), self._to_operand(upper))
@@ -112,10 +144,10 @@ class _ListAppendOperand(_Operand):
     A base class for Operands that can be used in the list_append function for the SET update action.
     """
 
-    def append(self, other: Any) -> '_ListAppend':
+    def append(self, other: Any) -> "_ListAppend":
         return _ListAppend(self, self._to_operand(other))
 
-    def prepend(self, other: Any) -> '_ListAppend':
+    def prepend(self, other: Any) -> "_ListAppend":
         return _ListAppend(self._to_operand(other), self)
 
 
@@ -123,10 +155,11 @@ class _Size(_ConditionOperand):
     """
     Size is a special operand that represents the result of calling the 'size' function on a Path operand.
     """
-    format_string = 'size ({0})'
+
+    format_string = "size ({0})"
     attr_type = NUMBER
 
-    def __init__(self, path: Union['Path', 'Attribute', str, List[str]]) -> None:
+    def __init__(self, path: Union["Path", "Attribute", str, List[str]]) -> None:
         if not isinstance(path, Path):
             path = Path(path)
         super(_Size, self).__init__(path)
@@ -141,10 +174,11 @@ class _Increment(_Operand):
     """
     Increment is a special operand that represents an increment SET update action.
     """
-    format_string = '{0} + {1}'
+
+    format_string = "{0} + {1}"
     attr_type = NUMBER
 
-    def __init__(self, lhs: '_Operand', rhs: '_Operand') -> None:
+    def __init__(self, lhs: "_Operand", rhs: "_Operand") -> None:
         lhs._type_check(NUMBER)
         rhs._type_check(NUMBER)
         super(_Increment, self).__init__(lhs, rhs)
@@ -154,7 +188,8 @@ class _Decrement(_Operand):
     """
     Decrement is a special operand that represents an decrement SET update action.
     """
-    format_string = '{0} - {1}'
+
+    format_string = "{0} - {1}"
     attr_type = NUMBER
 
     def __init__(self, lhs: _Operand, rhs: _Operand) -> None:
@@ -167,7 +202,8 @@ class _ListAppend(_Operand):
     """
     ListAppend is a special operand that represents the list_append function for the SET update action.
     """
-    format_string = 'list_append ({0}, {1})'
+
+    format_string = "list_append ({0}, {1})"
     attr_type = LIST
 
     def __init__(self, list1: _Operand, list2: _Operand):
@@ -180,7 +216,8 @@ class _IfNotExists(_NumericOperand, _ListAppendOperand):
     """
     IfNotExists is a special operand that represents the if_not_exists function for the SET update action.
     """
-    format_string = 'if_not_exists ({0}, {1})'
+
+    format_string = "if_not_exists ({0}, {1})"
 
     def __init__(self, path: _Operand, value: Any) -> None:
         self.attr_type = path.attr_type or value.attr_type
@@ -194,12 +231,17 @@ class Value(_NumericOperand, _ListAppendOperand, _ConditionOperand):
     """
     Value is an operand that represents an attribute value.
     """
-    format_string = '{0}'
 
-    def __init__(self, value: Any, attribute: Optional['Attribute'] = None) -> None:
+    format_string = "{0}"
+
+    def __init__(self, value: Any, attribute: Optional["Attribute"] = None) -> None:
         # Check to see if value is already serialized
-        if isinstance(value, dict) and len(value) == 1 and list(value.keys())[0] in ATTRIBUTE_TYPES:
-            (self.attr_type, value), = value.items()
+        if (
+            isinstance(value, dict)
+            and len(value) == 1
+            and list(value.keys())[0] in ATTRIBUTE_TYPES
+        ):
+            ((self.attr_type, value),) = value.items()
         elif value is None:
             (self.attr_type, value) = Value.__serialize(value)
         else:
@@ -207,10 +249,7 @@ class Value(_NumericOperand, _ListAppendOperand, _ConditionOperand):
         super(Value, self).__init__({self.attr_type: value})
 
     def _equals_to(self, other: Any) -> bool:
-        return (
-            super()._equals_to(other)
-            and self.attr_type == other.attr_type
-        )
+        return super()._equals_to(other) and self.attr_type == other.attr_type
 
     @property
     def value(self):
@@ -225,7 +264,7 @@ class Value(_NumericOperand, _ListAppendOperand, _ConditionOperand):
             return Value.__serialize_based_on_type(value)
         if attribute.attr_type == LIST and not isinstance(value, list):
             # List attributes assume the values to be serialized are lists.
-            (attr_type, attr_value), = attribute.serialize([value])[0].items()
+            ((attr_type, attr_value),) = attribute.serialize([value])[0].items()
             return attr_type, attr_value
         if attribute.attr_type == MAP and not isinstance(value, dict):
             # Map attributes assume the values to be serialized are maps.
@@ -235,6 +274,7 @@ class Value(_NumericOperand, _ListAppendOperand, _ConditionOperand):
     @staticmethod
     def __serialize_based_on_type(value):
         from aiopynamodb.attributes import _get_class_for_serialize
+
         attr_class = _get_class_for_serialize(value)
         return attr_class.attr_type, attr_class.serialize(value)
 
@@ -243,10 +283,14 @@ class Path(_NumericOperand, _ListAppendOperand, _ConditionOperand):
     """
     Path is an operand that represents either an attribute name or document path.
     """
-    format_string = '{0}'
 
-    def __init__(self, attribute_or_path: Union['Attribute', str, List[str]]) -> None:
-        from aiopynamodb.attributes import Attribute  # prevent circular import -- Attribute imports Path
+    format_string = "{0}"
+
+    def __init__(self, attribute_or_path: Union["Attribute", str, List[str]]) -> None:
+        from aiopynamodb.attributes import (
+            Attribute,
+        )  # prevent circular import -- Attribute imports Path
+
         path: Union[str, List[str]]
         if isinstance(attribute_or_path, Attribute):
             self.attribute = attribute_or_path
@@ -276,24 +320,36 @@ class Path(_NumericOperand, _ListAppendOperand, _ConditionOperand):
         # Because we define __getitem__ Path is considered an iterable
         raise TypeError("'{}' object is not iterable".format(self.__class__.__name__))
 
-    def __getitem__(self, item: Union[int, str]) -> 'Path':
+    def __getitem__(self, item: Union[int, str]) -> "Path":
         # The __getitem__ call returns a new Path instance without any attribute set.
         # This is intended since the nested element is not the same attribute as ``self``.
         if self.attribute and self.attribute.attr_type not in [LIST, MAP]:
-            raise TypeError("'{}' object has no attribute __getitem__".format(self.attribute.__class__.__name__))
+            raise TypeError(
+                "'{}' object has no attribute __getitem__".format(
+                    self.attribute.__class__.__name__
+                )
+            )
         if self.attr_type == LIST and not isinstance(item, int):
-            raise TypeError("list indices must be integers, not {}".format(type(item).__name__))
+            raise TypeError(
+                "list indices must be integers, not {}".format(type(item).__name__)
+            )
         if self.attr_type == MAP and not isinstance(item, str):
-            raise TypeError("map attributes must be strings, not {}".format(type(item).__name__))
+            raise TypeError(
+                "map attributes must be strings, not {}".format(type(item).__name__)
+            )
         if isinstance(item, int):
             # list dereference operator
-            element_path = Path(self.path)  # copy the document path before indexing last element
-            element_path.path[-1] = '{}[{}]'.format(self.path[-1], item)
+            element_path = Path(
+                self.path
+            )  # copy the document path before indexing last element
+            element_path.path[-1] = "{}[{}]".format(self.path[-1], item)
             return element_path
         if isinstance(item, str):
             # map dereference operator
             return Path(self.path + [item])
-        raise TypeError("item must be an integer or string, not {}".format(type(item).__name__))
+        raise TypeError(
+            "item must be an integer or string, not {}".format(type(item).__name__)
+        )
 
     def __or__(self, other):
         return _IfNotExists(self, self._to_operand(other))
@@ -329,8 +385,11 @@ class Path(_NumericOperand, _ListAppendOperand, _ConditionOperand):
 
     def is_type(self, attr_type: str) -> IsType:
         if attr_type not in ATTRIBUTE_TYPES:
-            raise ValueError("{} is not a valid attribute type. Must be one of {}".format(
-                attr_type, ATTRIBUTE_TYPES))
+            raise ValueError(
+                "{} is not a valid attribute type. Must be one of {}".format(
+                    attr_type, ATTRIBUTE_TYPES
+                )
+            )
         return IsType(self, Value(attr_type))
 
     def startswith(self, prefix: str) -> BeginsWith:
@@ -340,9 +399,13 @@ class Path(_NumericOperand, _ListAppendOperand, _ConditionOperand):
         return BeginsWith(self, operand)
 
     def contains(self, item: Any) -> Contains:
-        if self.attribute and self.attribute.attr_type in [BINARY_SET, NUMBER_SET, STRING_SET]:
+        if self.attribute and self.attribute.attr_type in [
+            BINARY_SET,
+            NUMBER_SET,
+            STRING_SET,
+        ]:
             # Set attributes assume the values to be serialized are sets.
-            (attr_type, attr_value), = self._to_value([item]).value.items()
+            ((attr_type, attr_value),) = self._to_value([item]).value.items()
             item = {attr_type[0]: attr_value[0]}
         return Contains(self, self._to_operand(item))
 
@@ -354,13 +417,16 @@ class Path(_NumericOperand, _ListAppendOperand, _ConditionOperand):
 
     def __str__(self) -> str:
         # Quote the path to illustrate that any dot characters are not dereference operators.
-        quoted_path = [self._quote_path(segment) if '.' in segment else segment for segment in self.path]
-        return '.'.join(quoted_path)
+        quoted_path = [
+            self._quote_path(segment) if "." in segment else segment
+            for segment in self.path
+        ]
+        return ".".join(quoted_path)
 
     def __repr__(self) -> str:
         return "Path({})".format(self.path)
 
     @staticmethod
     def _quote_path(path: str) -> str:
-        path, sep, rem = path.partition('[')
+        path, sep, rem = path.partition("[")
         return repr(path) + sep + rem

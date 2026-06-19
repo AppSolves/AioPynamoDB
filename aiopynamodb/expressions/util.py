@@ -5,7 +5,7 @@ from typing import List
 from typing import Union
 
 
-PATH_SEGMENT_REGEX = re.compile(r'([^\[\]]+)((?:\[\d+\])*)$')
+PATH_SEGMENT_REGEX = re.compile(r"([^\[\]]+)((?:\[\d+\])*)$")
 
 
 def get_path_segments(document_path: Union[str, List[str]]) -> List[str]:
@@ -18,10 +18,16 @@ def get_path_segments(document_path: Union[str, List[str]]) -> List[str]:
 
     Note: callers depend upon the returned list being a copy so that it may be safely mutated
     """
-    return document_path.split('.') if isinstance(document_path, str) else list(document_path)
+    return (
+        document_path.split(".")
+        if isinstance(document_path, str)
+        else list(document_path)
+    )
 
 
-def substitute_names(document_path: Union[str, List[str]], placeholders: Dict[str, str]) -> str:
+def substitute_names(
+    document_path: Union[str, List[str]], placeholders: Dict[str, str]
+) -> str:
     """
     Replaces all attribute names in the given document path with placeholders.
     Stores the placeholders in the given dictionary.
@@ -37,18 +43,22 @@ def substitute_names(document_path: Union[str, List[str]], placeholders: Dict[st
     for idx, segment in enumerate(path_segments):
         match = PATH_SEGMENT_REGEX.match(segment)
         if not match:
-            raise ValueError('{} is not a valid document path'.format('.'.join(document_path)))
+            raise ValueError(
+                "{} is not a valid document path".format(".".join(document_path))
+            )
         name, indexes = match.groups()
         if name in placeholders:
             placeholder = placeholders[name]
         else:
-            placeholder = '#' + str(len(placeholders))
+            placeholder = "#" + str(len(placeholders))
             placeholders[name] = placeholder
         path_segments[idx] = placeholder + indexes
-    return '.'.join(path_segments)
+    return ".".join(path_segments)
 
 
-def get_value_placeholder(value: Any, expression_attribute_values: Dict[str, str]) -> str:
-    placeholder = ':' + str(len(expression_attribute_values))
+def get_value_placeholder(
+    value: Any, expression_attribute_values: Dict[str, str]
+) -> str:
+    placeholder = ":" + str(len(expression_attribute_values))
     expression_attribute_values[placeholder] = value
     return placeholder

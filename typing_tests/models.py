@@ -1,17 +1,18 @@
 from __future__ import annotations
+
 from typing import Any
 
 from typing_extensions import assert_type
 
 
 def test_model_count() -> None:
-    from aiopynamodb.models import Model
     from aiopynamodb.expressions.operand import Path
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         pass
 
-    assert_type(MyModel.count('hash', Path('a').between(1, 3)), int)
+    assert_type(MyModel.count("hash", Path("a").between(1, 3)), int)
 
 
 def test_model_query() -> None:
@@ -22,7 +23,11 @@ def test_model_query() -> None:
         my_attr = NumberAttribute()
 
     # test conditions
-    MyModel.query(123, range_key_condition=(MyModel.my_attr == 5), filter_condition=(MyModel.my_attr == 5))
+    MyModel.query(
+        123,
+        range_key_condition=(MyModel.my_attr == 5),
+        filter_condition=(MyModel.my_attr == 5),
+    )
 
     # test conditions are optional
     MyModel.query(123, range_key_condition=None, filter_condition=None)
@@ -39,7 +44,7 @@ def test_pagination() -> None:
     for model in result_iterator:
         assert_type(model, MyModel)
     if result_iterator.last_evaluated_key:
-        assert_type(result_iterator.last_evaluated_key['my_attr'], dict[str, Any])
+        assert_type(result_iterator.last_evaluated_key["my_attr"], dict[str, Any])
 
 
 def test_model_update() -> None:
@@ -51,22 +56,24 @@ def test_model_update() -> None:
         my_str_attr = UnicodeAttribute()
 
     my_model = MyModel()
-    my_model.update(actions=[
-        # test update expressions
-        MyModel.my_attr.set(MyModel.my_attr + 123),
-        MyModel.my_attr.set(123 + MyModel.my_attr),
-        MyModel.my_attr.set(MyModel.my_attr - 123),
-        MyModel.my_attr.set(123 - MyModel.my_attr),
-        MyModel.my_attr.set(MyModel.my_attr | 123),
-    ])
+    my_model.update(
+        actions=[
+            # test update expressions
+            MyModel.my_attr.set(MyModel.my_attr + 123),
+            MyModel.my_attr.set(123 + MyModel.my_attr),
+            MyModel.my_attr.set(MyModel.my_attr - 123),
+            MyModel.my_attr.set(123 - MyModel.my_attr),
+            MyModel.my_attr.set(MyModel.my_attr | 123),
+        ]
+    )
 
-    _ = MyModel.my_attr.set('foo')  # type:ignore[arg-type]
-    _ = MyModel.my_attr.set(MyModel.my_str_attr)  # type:ignore[arg-type]
+    _ = MyModel.my_attr.set("foo")  # type: ignore[arg-type]
+    _ = MyModel.my_attr.set(MyModel.my_str_attr)  # type: ignore[arg-type]
 
 
 def test_paths() -> None:
-    import aiopynamodb.expressions.operand
     import aiopynamodb.expressions.condition
+    import aiopynamodb.expressions.operand
     from aiopynamodb.attributes import ListAttribute, MapAttribute, UnicodeAttribute
     from aiopynamodb.models import Model
 
@@ -78,22 +85,29 @@ def test_paths() -> None:
         my_map = MyMap()
 
     assert_type(MyModel.my_list[0], aiopynamodb.expressions.operand.Path)
-    assert_type(MyModel.my_list[0] == MyModel(), aiopynamodb.expressions.condition.Comparison)
+    assert_type(
+        MyModel.my_list[0] == MyModel(), aiopynamodb.expressions.condition.Comparison
+    )
     # the following string indexing is not type checked - not by mypy nor in runtime
-    assert_type(MyModel.my_list[0]['my_sub_attr'] == 'foobar', aiopynamodb.expressions.condition.Comparison)
-    assert_type(MyModel.my_map == 'foobar', aiopynamodb.expressions.condition.Comparison)
+    assert_type(
+        MyModel.my_list[0]["my_sub_attr"] == "foobar",
+        aiopynamodb.expressions.condition.Comparison,
+    )
+    assert_type(
+        MyModel.my_map == "foobar", aiopynamodb.expressions.condition.Comparison
+    )
 
 
 def test_index_query_scan() -> None:
     from aiopynamodb.attributes import NumberAttribute
-    from aiopynamodb.models import Model
     from aiopynamodb.indexes import GlobalSecondaryIndex
+    from aiopynamodb.models import Model
     from aiopynamodb.pagination import ResultIterator
 
     class UntypedIndex(GlobalSecondaryIndex):
         bar = NumberAttribute(hash_key=True)
 
-    class TypedIndex(GlobalSecondaryIndex['MyModel']):
+    class TypedIndex(GlobalSecondaryIndex["MyModel"]):
         bar = NumberAttribute(hash_key=True)
 
     class MyModel(Model):
@@ -128,25 +142,26 @@ def test_map_attribute_derivation() -> None:
 
 
 def test_is_in() -> None:
-    from aiopynamodb.models import Model
     from aiopynamodb.attributes import UnicodeAttribute
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         attr = UnicodeAttribute()
 
-    _ = MyModel.attr.is_in('foo', 'bar')
-    _ = MyModel.attr.is_in(123)  # type:ignore[arg-type]
-    _ = MyModel.attr.is_in(['foo', 'bar'])  # type:ignore[arg-type]
+    _ = MyModel.attr.is_in("foo", "bar")
+    _ = MyModel.attr.is_in(123)  # type: ignore[arg-type]
+    _ = MyModel.attr.is_in(["foo", "bar"])  # type: ignore[arg-type]
 
 
 def test_append() -> None:
-    from aiopynamodb.models import Model
     from aiopynamodb.attributes import ListAttribute, NumberAttribute
+    from aiopynamodb.models import Model
 
     class MyModel(Model):
         attr = ListAttribute(of=NumberAttribute)
 
-    MyModel.attr.append(42)  # type:ignore[arg-type]
+    MyModel.attr.append(42)  # type: ignore[arg-type]
     MyModel.attr.append([42])
-    MyModel.attr.prepend(42)  # type:ignore[arg-type]
+    MyModel.attr.prepend(42)  # type: ignore[arg-type]
+    MyModel.attr.prepend([42])
     MyModel.attr.prepend([42])

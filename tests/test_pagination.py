@@ -47,7 +47,9 @@ def test_rate_limiter_exceptions():
 @pytest.mark.asyncio
 async def test_basic_rate_limiting():
     mock_time = MockTime()
-    r = RateLimiter(0.1, mock_time)  # 0.1 operations per second = 10 second delay between operations
+    r = RateLimiter(
+        0.1, mock_time
+    )  # 0.1 operations per second = 10 second delay between operations
 
     # 100 operations
     for i in range(0, 100):
@@ -64,7 +66,9 @@ async def test_basic_rate_limiting():
 @pytest.mark.asyncio
 async def test_basic_rate_limiting_small_increment():
     mock_time = MockTime()
-    r = RateLimiter(0.1, mock_time)  # 0.1 operations per second = 10 second delay between operations
+    r = RateLimiter(
+        0.1, mock_time
+    )  # 0.1 operations per second = 10 second delay between operations
 
     # 100 operations
     for i in range(0, 100):
@@ -81,7 +85,9 @@ async def test_basic_rate_limiting_small_increment():
 @pytest.mark.asyncio
 async def test_basic_rate_limiting_large_increment():
     mock_time = MockTime()
-    r = RateLimiter(0.1, mock_time)  # 0.1 operations per second = 10 second delay between operations
+    r = RateLimiter(
+        0.1, mock_time
+    )  # 0.1 operations per second = 10 second delay between operations
 
     # 100 operations
     for i in range(0, 100):

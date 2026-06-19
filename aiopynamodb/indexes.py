@@ -1,32 +1,40 @@
 """
 AioPynamoDB Indexes
 """
-from inspect import getmembers
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
-from typing import TYPE_CHECKING
 
-from aiopynamodb._schema import IndexSchema, GlobalSecondaryIndexSchema
-from aiopynamodb._schema import ModelSchema
-from aiopynamodb.constants import (
-    INCLUDE, ALL, KEYS_ONLY, ATTR_NAME, ATTR_TYPE, KEY_TYPE,
-    PROJECTION_TYPE, NON_KEY_ATTRIBUTES,
-    READ_CAPACITY_UNITS, WRITE_CAPACITY_UNITS,
-)
+from inspect import getmembers
+from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, Type, TypeVar
+
+from aiopynamodb._schema import GlobalSecondaryIndexSchema, IndexSchema, ModelSchema
 from aiopynamodb.attributes import Attribute
+from aiopynamodb.constants import (
+    ALL,
+    ATTR_NAME,
+    ATTR_TYPE,
+    INCLUDE,
+    KEY_TYPE,
+    KEYS_ONLY,
+    NON_KEY_ATTRIBUTES,
+    PROJECTION_TYPE,
+    READ_CAPACITY_UNITS,
+    WRITE_CAPACITY_UNITS,
+)
 from aiopynamodb.expressions.condition import Condition
 from aiopynamodb.pagination import ResultIterator
 from aiopynamodb.types import HASH, RANGE
+
 if TYPE_CHECKING:
     from aiopynamodb.models import Model
 
 _KeyType = Any
-_M = TypeVar('_M', bound='Model')
+_M = TypeVar("_M", bound="Model")
 
 
 class Index(Generic[_M]):
     """
     Base class for secondary indexes
     """
+
     Meta: Any = None
     _model: _M
 
@@ -42,7 +50,9 @@ class Index(Generic[_M]):
         if self.Meta is None:
             raise ValueError("Indexes require a Meta class for settings")
         if not hasattr(self.Meta, "projection"):
-            raise ValueError("No projection defined, define a projection for this class")
+            raise ValueError(
+                "No projection defined, define a projection for this class"
+            )
 
     def __set_name__(self, owner: Type[_M], name: str):
         if not hasattr(self.Meta, "index_name"):
@@ -146,26 +156,32 @@ class Index(Generic[_M]):
         Returns the schema for this index
         """
         schema: IndexSchema = {
-            'index_name': cls.Meta.index_name,
-            'key_schema': [],
-            'projection': {
+            "index_name": cls.Meta.index_name,
+            "key_schema": [],
+            "projection": {
                 PROJECTION_TYPE: cls.Meta.projection.projection_type,
             },
-            'attribute_definitions': [],
+            "attribute_definitions": [],
         }
 
         for attr_cls in cls.Meta.attributes.values():
             if attr_cls.is_hash_key or attr_cls.is_range_key:
-                schema['attribute_definitions'].append({
-                    ATTR_NAME: attr_cls.attr_name,
-                    ATTR_TYPE: attr_cls.attr_type,
-                })
-                schema['key_schema'].append({
-                    ATTR_NAME: attr_cls.attr_name,
-                    KEY_TYPE: HASH if attr_cls.is_hash_key else RANGE,
-                })
+                schema["attribute_definitions"].append(
+                    {
+                        ATTR_NAME: attr_cls.attr_name,
+                        ATTR_TYPE: attr_cls.attr_type,
+                    }
+                )
+                schema["key_schema"].append(
+                    {
+                        ATTR_NAME: attr_cls.attr_name,
+                        KEY_TYPE: HASH if attr_cls.is_hash_key else RANGE,
+                    }
+                )
         if cls.Meta.projection.non_key_attributes:
-            schema['projection'][NON_KEY_ATTRIBUTES] = cls.Meta.projection.non_key_attributes
+            schema["projection"][NON_KEY_ATTRIBUTES] = (
+                cls.Meta.projection.non_key_attributes
+            )
         return schema
 
 
@@ -173,24 +189,29 @@ class GlobalSecondaryIndex(Index[_M]):
     """
     A global secondary index
     """
+
     @classmethod
     def _update_model_schema(cls, schema: ModelSchema) -> None:
         index_schema: GlobalSecondaryIndexSchema = {
-            **cls._get_schema(),  # type:ignore[misc]  # https://github.com/python/mypy/pull/13353
-            'provisioned_throughput': {},
+            **cls._get_schema(),  # type: ignore[misc]  # https://github.com/python/mypy/pull/13353
+            "provisioned_throughput": {},
         }
 
-        if hasattr(cls.Meta, 'read_capacity_units'):
-            index_schema['provisioned_throughput'][READ_CAPACITY_UNITS] = cls.Meta.read_capacity_units
-        if hasattr(cls.Meta, 'write_capacity_units'):
-            index_schema['provisioned_throughput'][WRITE_CAPACITY_UNITS] = cls.Meta.write_capacity_units
+        if hasattr(cls.Meta, "read_capacity_units"):
+            index_schema["provisioned_throughput"][READ_CAPACITY_UNITS] = (
+                cls.Meta.read_capacity_units
+            )
+        if hasattr(cls.Meta, "write_capacity_units"):
+            index_schema["provisioned_throughput"][WRITE_CAPACITY_UNITS] = (
+                cls.Meta.write_capacity_units
+            )
 
-        schema['global_secondary_indexes'].append(index_schema)
+        schema["global_secondary_indexes"].append(index_schema)
         # With polymorphism, indexes can use the same attribute, e.g. index1 on (thread_id, created_at)
         # and index2 on (thread_id, updated_at). We need to deduplicate.
-        for attr_def in index_schema['attribute_definitions']:
-            if attr_def not in schema['attribute_definitions']:
-                schema['attribute_definitions'].append(attr_def)
+        for attr_def in index_schema["attribute_definitions"]:
+            if attr_def not in schema["attribute_definitions"]:
+                schema["attribute_definitions"].append(attr_def)
 
 
 class LocalSecondaryIndex(Index[_M]):
@@ -201,19 +222,19 @@ class LocalSecondaryIndex(Index[_M]):
     @classmethod
     def _update_model_schema(cls, schema: ModelSchema) -> None:
         index_schema = cls._get_schema()
-        schema['local_secondary_indexes'].append(index_schema)
+        schema["local_secondary_indexes"].append(index_schema)
         # With polymorphism, indexes can use the same attribute, e.g. index1 on (thread_id, created_at)
         # and index2 on (thread_id, updated_at). We need to deduplicate.
-        for attr_def in index_schema['attribute_definitions']:
-            if attr_def not in schema['attribute_definitions']:
-                schema['attribute_definitions'].append(attr_def)
-
+        for attr_def in index_schema["attribute_definitions"]:
+            if attr_def not in schema["attribute_definitions"]:
+                schema["attribute_definitions"].append(attr_def)
 
 
 class Projection:
     """
     A class for presenting projections
     """
+
     projection_type: Any = None
     non_key_attributes: Any = None
 
@@ -222,6 +243,7 @@ class KeysOnlyProjection(Projection):
     """
     Keys only projection
     """
+
     projection_type = KEYS_ONLY
 
 
@@ -229,11 +251,14 @@ class IncludeProjection(Projection):
     """
     An INCLUDE projection
     """
+
     projection_type = INCLUDE
 
     def __init__(self, non_attr_keys: Optional[List[str]] = None) -> None:
         if not non_attr_keys:
-            raise ValueError("The INCLUDE type projection requires a list of string attribute names")
+            raise ValueError(
+                "The INCLUDE type projection requires a list of string attribute names"
+            )
         self.non_key_attributes = non_attr_keys
 
 
@@ -241,4 +266,5 @@ class AllProjection(Projection):
     """
     An ALL projection
     """
+
     projection_type = ALL

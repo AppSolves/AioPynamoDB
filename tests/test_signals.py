@@ -10,16 +10,16 @@ try:
 except ImportError:
     blinker = None
 
-PATCH_METHOD = 'aiopynamodb.connection.Connection._make_api_call'
+PATCH_METHOD = "aiopynamodb.connection.Connection._make_api_call"
 
 
 @unittest.mock.patch(PATCH_METHOD)
-@unittest.mock.patch('aiopynamodb.connection.base.uuid')
+@unittest.mock.patch("aiopynamodb.connection.base.uuid")
 @pytest.mark.asyncio
 async def test_signal(mock_uuid, mock_req):
     pre_recorded = []
     post_recorded = []
-    UUID = '123-abc'
+    UUID = "123-abc"
 
     def record_pre_dynamodb_send(sender, operation_name, table_name, req_uuid):
         pre_recorded.append((operation_name, table_name, req_uuid))
@@ -31,22 +31,24 @@ async def test_signal(mock_uuid, mock_req):
     post_dynamodb_send.connect(record_post_dynamodb_send)
     try:
         mock_uuid.uuid4.return_value = UUID
-        mock_req.return_value = {'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'}}
+        mock_req.return_value = {
+            "TableDescription": {"TableName": "table", "TableStatus": "Creating"}
+        }
         c = Connection()
-        await c.dispatch('CreateTable', {'TableName': 'MyTable'})
-        assert ('CreateTable', 'MyTable', UUID) == pre_recorded[0]
-        assert ('CreateTable', 'MyTable', UUID) == post_recorded[0]
+        await c.dispatch("CreateTable", {"TableName": "MyTable"})
+        assert ("CreateTable", "MyTable", UUID) == pre_recorded[0]
+        assert ("CreateTable", "MyTable", UUID) == post_recorded[0]
     finally:
         pre_dynamodb_send.disconnect(record_pre_dynamodb_send)
         post_dynamodb_send.disconnect(record_post_dynamodb_send)
 
 
 @unittest.mock.patch(PATCH_METHOD)
-@unittest.mock.patch('aiopynamodb.connection.base.uuid')
+@unittest.mock.patch("aiopynamodb.connection.base.uuid")
 @pytest.mark.asyncio
 async def test_signal_exception_pre_signal(mock_uuid, mock_req):
     post_recorded = []
-    UUID = '123-abc'
+    UUID = "123-abc"
 
     def record_pre_dynamodb_send(sender, operation_name, table_name, req_uuid):
         raise ValueError()
@@ -58,21 +60,23 @@ async def test_signal_exception_pre_signal(mock_uuid, mock_req):
     post_dynamodb_send.connect(record_post_dynamodb_send)
     try:
         mock_uuid.uuid4.return_value = UUID
-        mock_req.return_value = {'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'}}
+        mock_req.return_value = {
+            "TableDescription": {"TableName": "table", "TableStatus": "Creating"}
+        }
         c = Connection()
-        await c.dispatch('CreateTable', {'TableName': 'MyTable'})
-        assert ('CreateTable', 'MyTable', UUID) == post_recorded[0]
+        await c.dispatch("CreateTable", {"TableName": "MyTable"})
+        assert ("CreateTable", "MyTable", UUID) == post_recorded[0]
     finally:
         pre_dynamodb_send.disconnect(record_pre_dynamodb_send)
         post_dynamodb_send.disconnect(record_post_dynamodb_send)
 
 
 @unittest.mock.patch(PATCH_METHOD)
-@unittest.mock.patch('aiopynamodb.connection.base.uuid')
+@unittest.mock.patch("aiopynamodb.connection.base.uuid")
 @pytest.mark.asyncio
 async def test_signal_exception_post_signal(mock_uuid, mock_req):
     pre_recorded = []
-    UUID = '123-abc'
+    UUID = "123-abc"
 
     def record_pre_dynamodb_send(sender, operation_name, table_name, req_uuid):
         pre_recorded.append((operation_name, table_name, req_uuid))
@@ -84,10 +88,12 @@ async def test_signal_exception_post_signal(mock_uuid, mock_req):
     post_dynamodb_send.connect(record_post_dynamodb_send)
     try:
         mock_uuid.uuid4.return_value = UUID
-        mock_req.return_value = {'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'}}
+        mock_req.return_value = {
+            "TableDescription": {"TableName": "table", "TableStatus": "Creating"}
+        }
         c = Connection()
-        await c.dispatch('CreateTable', {'TableName': 'MyTable'})
-        assert ('CreateTable', 'MyTable', UUID) == pre_recorded[0]
+        await c.dispatch("CreateTable", {"TableName": "MyTable"})
+        assert ("CreateTable", "MyTable", UUID) == pre_recorded[0]
     finally:
         pre_dynamodb_send.disconnect(record_pre_dynamodb_send)
         post_dynamodb_send.disconnect(record_post_dynamodb_send)
@@ -95,7 +101,9 @@ async def test_signal_exception_post_signal(mock_uuid, mock_req):
 
 def test_fake_signals():
     _signals = _FakeNamespace()
-    pre_dynamodb_send = _signals.signal('pre_dynamodb_send')
+    pre_dynamodb_send = _signals.signal("pre_dynamodb_send")
     with pytest.raises(RuntimeError):
         pre_dynamodb_send.connect(lambda x: x)
-    pre_dynamodb_send.send(object, operation_name="UPDATE", table_name="TEST", req_uuid="something")
+    pre_dynamodb_send.send(
+        object, operation_name="UPDATE", table_name="TEST", req_uuid="something"
+    )

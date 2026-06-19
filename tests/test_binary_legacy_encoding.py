@@ -11,6 +11,7 @@ def test_legacy_encoding__model() -> None:
 
 
 def test_legacy_encoding__map_attribute() -> None:
-    with pytest.raises(ValueError, match='legacy_encoding'):
+    with pytest.raises(ValueError, match="legacy_encoding"):
+
         class _(MapAttribute):
             binary = BinaryAttribute(legacy_encoding=True)

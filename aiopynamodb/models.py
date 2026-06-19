@@ -334,7 +334,7 @@ class MetaModel(AttributeContainerMeta):
             if "DoesNotExist" not in namespace:
                 exception_attrs = {
                     "__module__": namespace.get("__module__"),
-                    "__qualname__": f'{cls.__qualname__}.{"DoesNotExist"}',
+                    "__qualname__": f"{cls.__qualname__}.{'DoesNotExist'}",
                 }
                 cls.DoesNotExist = type(
                     "DoesNotExist", (DoesNotExist,), exception_attrs
@@ -1191,7 +1191,9 @@ class Model(AttributeContainer, metaclass=MetaModel):
             attributes_to_get=attributes_to_get,
         )
         item_data = data.get(RESPONSES).get(cls.Meta.table_name)  # type: ignore
-        unprocessed_items = data.get(UNPROCESSED_KEYS).get(cls.Meta.table_name, {}).get(KEYS, None)  # type: ignore
+        unprocessed_items = (
+            data.get(UNPROCESSED_KEYS).get(cls.Meta.table_name, {}).get(KEYS, None)
+        )  # type: ignore
         return item_data, unprocessed_items
 
     @classmethod

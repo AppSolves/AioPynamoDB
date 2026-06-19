@@ -3,7 +3,7 @@ import os
 import pytest
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope="module")
 def ddb_url():
     """Obtain the URL of a local DynamoDB instance.
 

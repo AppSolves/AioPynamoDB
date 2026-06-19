@@ -107,14 +107,16 @@ async def main():
     # Example failed transactions.
     connection = Connection(host="http://localhost:8000")
 
-    async with assert_condition_check_fails(), TransactWrite(
-        connection=connection
-    ) as transaction:
+    async with (
+        assert_condition_check_fails(),
+        TransactWrite(connection=connection) as transaction,
+    ):
         transaction.save(Office(office.office_id, name="newer name", employees=[]))
 
-    async with assert_condition_check_fails(), TransactWrite(
-        connection=connection
-    ) as transaction:
+    async with (
+        assert_condition_check_fails(),
+        TransactWrite(connection=connection) as transaction,
+    ):
         transaction.update(
             Office(office.office_id, name="newer name", employees=[]),
             actions=[
@@ -122,9 +124,10 @@ async def main():
             ],
         )
 
-    async with assert_condition_check_fails(), TransactWrite(
-        connection=connection
-    ) as transaction:
+    async with (
+        assert_condition_check_fails(),
+        TransactWrite(connection=connection) as transaction,
+    ):
         transaction.delete(Office(office.office_id, name="newer name", employees=[]))
 
     # Example successful transaction.

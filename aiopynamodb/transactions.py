@@ -6,17 +6,18 @@ from aiopynamodb.expressions.condition import Condition
 from aiopynamodb.expressions.update import Action
 from aiopynamodb.models import Model, _ModelFuture, _KeyType
 
-_M = TypeVar('_M', bound=Model)
-_TTransaction = TypeVar('_TTransaction', bound='Transaction')
+_M = TypeVar("_M", bound=Model)
+_TTransaction = TypeVar("_TTransaction", bound="Transaction")
 
 
 class Transaction:
-
     """
     Base class for a type of transaction operation
     """
 
-    def __init__(self, connection: Connection, return_consumed_capacity: Optional[str] = None) -> None:
+    def __init__(
+        self, connection: Connection, return_consumed_capacity: Optional[str] = None
+    ) -> None:
         self._connection = connection
         self._return_consumed_capacity = return_consumed_capacity
 
@@ -32,7 +33,6 @@ class Transaction:
 
 
 class TransactGet(Transaction):
-
     _results: Optional[List] = None
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -40,7 +40,12 @@ class TransactGet(Transaction):
         self._futures: List[_ModelFuture] = []
         super(TransactGet, self).__init__(*args, **kwargs)
 
-    def get(self, model_cls: Type[_M], hash_key: _KeyType, range_key: Optional[_KeyType] = None) -> _ModelFuture[_M]:
+    def get(
+        self,
+        model_cls: Type[_M],
+        hash_key: _KeyType,
+        range_key: Optional[_KeyType] = None,
+    ) -> _ModelFuture[_M]:
         """
         Adds the operation arguments for an item to list of models to get
         returns a _ModelFuture object as a placeholder
@@ -50,7 +55,9 @@ class TransactGet(Transaction):
         :param range_key:
         :return:
         """
-        operation_kwargs = model_cls.get_operation_kwargs_from_class(hash_key, range_key=range_key)
+        operation_kwargs = model_cls.get_operation_kwargs_from_class(
+            hash_key, range_key=range_key
+        )
         model_future = _ModelFuture(model_cls)
         self._futures.append(model_future)
         self._get_items.append(operation_kwargs)
@@ -64,7 +71,7 @@ class TransactGet(Transaction):
     async def _commit(self) -> Any:
         response = await self._connection.transact_get_items(
             get_items=self._get_items,
-            return_consumed_capacity=self._return_consumed_capacity
+            return_consumed_capacity=self._return_consumed_capacity,
         )
 
         results = response[RESPONSES]
@@ -74,7 +81,6 @@ class TransactGet(Transaction):
 
 
 class TransactWrite(Transaction):
-
     def __init__(
         self,
         client_request_token: Optional[str] = None,
@@ -90,35 +96,54 @@ class TransactWrite(Transaction):
         self._update_items: List[Dict] = []
         self._models_for_version_attribute_update: List[Any] = []
 
-    def condition_check(self, model_cls: Type[_M], hash_key: _KeyType, range_key: Optional[_KeyType] = None, condition: Optional[Condition] = None):
+    def condition_check(
+        self,
+        model_cls: Type[_M],
+        hash_key: _KeyType,
+        range_key: Optional[_KeyType] = None,
+        condition: Optional[Condition] = None,
+    ):
         if condition is None:
-            raise TypeError('`condition` cannot be None')
+            raise TypeError("`condition` cannot be None")
         operation_kwargs = model_cls.get_operation_kwargs_from_class(
-            hash_key,
-            range_key=range_key,
-            condition=condition
+            hash_key, range_key=range_key, condition=condition
         )
         self._condition_check_items.append(operation_kwargs)
 
-    def delete(self, model: _M, condition: Optional[Condition] = None, *, add_version_condition: bool = True) -> None:
+    def delete(
+        self,
+        model: _M,
+        condition: Optional[Condition] = None,
+        *,
+        add_version_condition: bool = True,
+    ) -> None:
         operation_kwargs = model.get_delete_kwargs_from_instance(
             condition=condition,
             add_version_condition=add_version_condition,
         )
         self._delete_items.append(operation_kwargs)
 
-    def save(self, model: _M, condition: Optional[Condition] = None, return_values: Optional[str] = None) -> None:
+    def save(
+        self,
+        model: _M,
+        condition: Optional[Condition] = None,
+        return_values: Optional[str] = None,
+    ) -> None:
         operation_kwargs = model.get_save_kwargs_from_instance(
-            condition=condition,
-            return_values_on_condition_failure=return_values
+            condition=condition, return_values_on_condition_failure=return_values
         )
         self._put_items.append(operation_kwargs)
         self._models_for_version_attribute_update.append(model)
 
-    def update(self, model: _M, actions: List[Action], condition: Optional[Condition] = None,
-               return_values: Optional[str] = None,
-               *,
-               add_version_condition: bool = True) -> None:
+    def update(
+        self,
+        model: _M,
+        actions: List[Action],
+        condition: Optional[Condition] = None,
+        return_values: Optional[str] = None,
+        *,
+        add_version_condition: bool = True,
+    ) -> None:
         operation_kwargs = model.get_update_kwargs_from_instance(
             actions=actions,
             condition=condition,
