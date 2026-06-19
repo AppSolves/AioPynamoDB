@@ -1,5 +1,5 @@
 """
-DynamoDB Models for PynamoDB
+DynamoDB Models for AioPynamoDB
 """
 import random
 import time
@@ -252,7 +252,7 @@ class MetaModel(AttributeContainerMeta):
                     if not hasattr(attr_obj, 'aws_session_token'):
                         setattr(attr_obj, 'aws_session_token', None)
 
-            # create a custom Model.DoesNotExist derived from aiopynamodb.exceptions.DoesNotExist,
+            # create a custom Model.DoesNotExist derived from aioaiopynamodb.exceptions.DoesNotExist,
             # so that "except Model.DoesNotExist:" would not catch other models' exceptions
             if 'DoesNotExist' not in namespace:
                 exception_attrs = {
@@ -277,7 +277,7 @@ class MetaModel(AttributeContainerMeta):
 
 class Model(AttributeContainer, metaclass=MetaModel):
     """
-    Defines a `PynamoDB` Model
+    Defines an `AioPynamoDB` Model
 
     This model is backed by a table in DynamoDB.
     You can create the table with the ``create_table`` method.
@@ -398,10 +398,10 @@ class Model(AttributeContainer, metaclass=MetaModel):
         """
         Deletes this object from DynamoDB.
 
-        :param add_version_condition: For models which have a :class:`~pynamodb.attributes.VersionAttribute`,
+        :param add_version_condition: For models which have a :class:`~aiopynamodb.attributes.VersionAttribute`,
           specifies whether the item should only be deleted if its current version matches the expected one.
           Set to `False` for a 'delete anyway' strategy.
-        :raises pynamodb.exceptions.DeleteError: If the record can not be deleted
+        :raises aiopynamodb.exceptions.DeleteError: If the record can not be deleted
         """
         hk_value, rk_value = self._get_hash_range_key_serialized_values()
 
@@ -418,12 +418,12 @@ class Model(AttributeContainer, metaclass=MetaModel):
         :param actions: a list of Action updates to apply
         :param condition: an optional Condition on which to update
         :param settings: per-operation settings
-        :param add_version_condition: For models which have a :class:`~pynamodb.attributes.VersionAttribute`,
+        :param add_version_condition: For models which have a :class:`~aiopynamodb.attributes.VersionAttribute`,
           specifies whether only to update if the version matches the model that is currently loaded.
           Set to `False` for a 'last write wins' strategy.
           Regardless, the version will always be incremented to prevent "rollbacks" by concurrent :meth:`save` calls.
         :raises ModelInstance.DoesNotExist: if the object to be updated does not exist
-        :raises pynamodb.exceptions.UpdateError: if the `condition` is not met
+        :raises aiopynamodb.exceptions.UpdateError: if the `condition` is not met
         """
         if not isinstance(actions, list) or len(actions) == 0:
             raise TypeError("the value of `actions` is expected to be a non-empty list")
@@ -896,7 +896,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         This is used for serializing items to be saved.
 
         :param condition: If set, a condition
-        :param add_version_condition: For models which have a :class:`~pynamodb.attributes.VersionAttribute`,
+        :param add_version_condition: For models which have a :class:`~aiopynamodb.attributes.VersionAttribute`,
           specifies whether the item should only be saved if its current version matches the expected one.
           Set to `False` for a 'last-write-wins' strategy.
         """
@@ -1034,7 +1034,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
         """
         if not hasattr(cls, "Meta"):
             raise AttributeError(
-                'As of v1.0 PynamoDB Models require a `Meta` class.\n'
+                'As of v1.0 AioPynamoDB Models require a `Meta` class.\n'
                 'Model: {}.{}\n'
                 'See https://pynamodb.readthedocs.io/en/latest/release_notes.html\n'.format(
                     cls.__module__, cls.__name__,
@@ -1042,7 +1042,7 @@ class Model(AttributeContainer, metaclass=MetaModel):
             )
         elif not hasattr(cls.Meta, "table_name") or cls.Meta.table_name is None:
             raise AttributeError(
-                'As of v1.0 PynamoDB Models must have a table_name\n'
+                'As of v1.0 AioPynamoDB Models must have a table_name\n'
                 'Model: {}.{}\n'
                 'See https://pynamodb.readthedocs.io/en/latest/release_notes.html'.format(
                     cls.__module__, cls.__name__,
@@ -1086,6 +1086,13 @@ class Model(AttributeContainer, metaclass=MetaModel):
         return cls._connection
 
     @classmethod
+    async def close_connection(cls) -> None:
+        """Close the cached connection and release HTTP resources."""
+        if cls._connection is not None:
+            await cls._connection.close()
+            cls._connection = None
+
+    @classmethod
     def _serialize_value(cls, attr, value):
         """
         Serializes a value for use with DynamoDB
@@ -1124,8 +1131,8 @@ class Model(AttributeContainer, metaclass=MetaModel):
             BINARY and BINARY_SET attributes (whether top-level or nested) serialization would contain
             :code:`bytes` objects which are not JSON-serializable by the :code:`json` module.
 
-            Use :meth:`~pynamodb.attributes.AttributeContainer.to_dynamodb_dict`
-            and :meth:`~pynamodb.attributes.AttributeContainer.to_simple_dict` for JSON-serializable mappings.
+            Use :meth:`~aiopynamodb.attributes.AttributeContainer.to_dynamodb_dict`
+            and :meth:`~aiopynamodb.attributes.AttributeContainer.to_simple_dict` for JSON-serializable mappings.
         """
         return self._container_serialize(null_check=null_check)
 

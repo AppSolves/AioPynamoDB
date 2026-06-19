@@ -1,5 +1,5 @@
 """
-PynamoDB Connection classes
+AioPynamoDB Connection classes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 from typing import Any, Dict, Mapping, Optional, Sequence
@@ -45,6 +45,10 @@ class TableConnection:
 
         if meta_table is not None:
             self.connection.add_meta_table(meta_table)
+
+    async def close(self):
+        """Close the underlying connection."""
+        await self.connection.close()
 
     def get_meta_table(self) -> MetaTable:
         """

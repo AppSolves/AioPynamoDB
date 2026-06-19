@@ -4,44 +4,44 @@ API
 High Level API
 --------------
 
-.. automodule:: pynamodb.models
+.. automodule:: aiopynamodb.models
     :members: Model
 
-.. automodule:: pynamodb.attributes
+.. automodule:: aiopynamodb.attributes
     :members:
 
-.. automodule:: pynamodb.indexes
+.. automodule:: aiopynamodb.indexes
     :members:
 
-.. automodule:: pynamodb.transactions
+.. automodule:: aiopynamodb.transactions
     :members:
 
-.. automodule:: pynamodb.pagination
+.. automodule:: aiopynamodb.pagination
     :members:
 
 Low Level API
 -------------
 
-.. automodule:: pynamodb.connection
+.. automodule:: aiopynamodb.connection
     :members: Connection, TableConnection
 
 Exceptions
 ----------
 
-.. autoexception:: pynamodb.exceptions.PynamoDBException
-.. autoexception:: pynamodb.exceptions.PynamoDBConnectionError
-.. autoexception:: pynamodb.exceptions.DeleteError
-.. autoexception:: pynamodb.exceptions.QueryError
-.. autoexception:: pynamodb.exceptions.ScanError
-.. autoexception:: pynamodb.exceptions.PutError
-.. autoexception:: pynamodb.exceptions.UpdateError
-.. autoexception:: pynamodb.exceptions.GetError
-.. autoexception:: pynamodb.exceptions.TableError
-.. autoexception:: pynamodb.exceptions.TableDoesNotExist
-.. autoexception:: pynamodb.exceptions.DoesNotExist
-.. autoexception:: pynamodb.exceptions.TransactWriteError
-.. autoexception:: pynamodb.exceptions.TransactGetError
-.. autoexception:: pynamodb.exceptions.InvalidStateError
-.. autoexception:: pynamodb.exceptions.AttributeDeserializationError
-.. autoexception:: pynamodb.exceptions.AttributeNullError
-.. autoclass:: pynamodb.exceptions.CancellationReason
+.. autoexception:: aiopynamodb.exceptions.PynamoDBException
+.. autoexception:: aiopynamodb.exceptions.PynamoDBConnectionError
+.. autoexception:: aiopynamodb.exceptions.DeleteError
+.. autoexception:: aiopynamodb.exceptions.QueryError
+.. autoexception:: aiopynamodb.exceptions.ScanError
+.. autoexception:: aiopynamodb.exceptions.PutError
+.. autoexception:: aiopynamodb.exceptions.UpdateError
+.. autoexception:: aiopynamodb.exceptions.GetError
+.. autoexception:: aiopynamodb.exceptions.TableError
+.. autoexception:: aiopynamodb.exceptions.TableDoesNotExist
+.. autoexception:: aiopynamodb.exceptions.DoesNotExist
+.. autoexception:: aiopynamodb.exceptions.TransactWriteError
+.. autoexception:: aiopynamodb.exceptions.TransactGetError
+.. autoexception:: aiopynamodb.exceptions.InvalidStateError
+.. autoexception:: aiopynamodb.exceptions.AttributeDeserializationError
+.. autoexception:: aiopynamodb.exceptions.AttributeNullError
+.. autoclass:: aiopynamodb.exceptions.CancellationReason

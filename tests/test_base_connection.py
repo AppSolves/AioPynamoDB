@@ -40,6 +40,28 @@ class MockResponse(mock.AsyncMock):
         return _content()
 
 
+def make_session_mock(credentials=True):
+    session_mock = mock.MagicMock()
+
+    def build_client_context_manager(*args, **kwargs):
+        del args, kwargs
+
+        client = mock.MagicMock()
+        client._request_signer = mock.Mock()
+        client._request_signer._credentials = credentials
+        client.meta = mock.Mock()
+        client.meta.events = mock.Mock()
+        client.meta.events.register_first = mock.Mock()
+
+        client_context_manager = mock.AsyncMock()
+        client_context_manager.__aenter__.return_value = client
+        client_context_manager.__aexit__.return_value = None
+        return client_context_manager
+
+    session_mock.create_client.side_effect = build_client_context_manager
+    return session_mock
+
+
 @pytest.fixture
 def meta_table():
     return MetaTable(DESCRIBE_TABLE_DATA.get(TABLE_KEY))
@@ -70,19 +92,22 @@ def test_meta_table_has_index_name(meta_table):
 async def test_connection__create():
     _ = Connection()
     conn = Connection(host='http://foohost')
-    assert await conn.client
+    session_mock = make_session_mock()
+    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+        assert await conn.client()
     assert repr(conn) == "Connection<http://foohost>"
 
 
 @pytest.mark.asyncio
 async def test_connection__subsequent_client_is_not_cached_when_credentials_none():
-    with patch('aiopynamodb.connection.Connection.session') as session_mock:
+    session_mock = make_session_mock()
+    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
         conn = Connection()
-        (await conn.client)._request_signer._credentials = None
+        (await conn.client())._request_signer._credentials = None
 
-        # make two calls to .client property, expect two calls to create client
-        assert (await conn.client)
-        (await conn.client)
+        # make two calls to .client method, expect two calls to create client
+        assert (await conn.client())
+        (await conn.client())
 
         session_mock.create_client.assert_has_calls(
             [
@@ -98,13 +123,13 @@ async def test_connection__subsequent_client_is_not_cached_when_credentials_none
 
 @pytest.mark.asyncio
 async def test_connection__subsequent_client_is_cached_when_credentials_truthy():
-    with patch('aiopynamodb.connection.Connection.session') as session_mock:
-        session_mock.create_client.return_value._request_signer._credentials = True
+    session_mock = make_session_mock()
+    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
         conn = Connection()
 
-        # make two calls to .client property, expect one call to create client
-        assert await conn.client
-        assert await conn.client
+        # make two calls to .client method, expect one call to create client
+        assert await conn.client()
+        assert await conn.client()
 
         calls = session_mock.create_client.mock_calls.count(
             mock.call(service_name='dynamodb', region_name=None, endpoint_url=None, config=mock.ANY)
@@ -114,11 +139,11 @@ async def test_connection__subsequent_client_is_cached_when_credentials_truthy()
 
 @pytest.mark.asyncio
 async def test_connection__client_is_passed_region_when_set():
-    with patch('aiopynamodb.connection.Connection.session') as session_mock:
-        session_mock.create_client.return_value._request_signer._credentials = True
+    session_mock = make_session_mock()
+    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
         conn = Connection(REGION)
 
-        assert (await conn.client)
+        assert (await conn.client())
 
         calls = session_mock.create_client.mock_calls.count(
             mock.call(service_name='dynamodb', region_name=REGION, endpoint_url=None, config=mock.ANY)
@@ -1400,13 +1425,13 @@ async def test_connection__make_api_call__wraps_verbose_client_error_create(send
     with pytest.raises(VerboseClientError) as excinfo:
         await c._make_api_call('CreateTable', {'TableName': 'MyTable'})
     assert (
-            'on table (MyTable) when calling the CreateTable operation: The security token included'
+            'on table (MyTable) when calling the CreateTable operation: There is a problem'
             in str(excinfo.value)
     )
 
 @pytest.mark.asyncio
 @mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
-async def test_connection__make_api_call__wraps_verbose_client_error_create(send_mock):
+async def test_connection__make_api_call__wraps_verbose_client_error_create_message(send_mock):
     response = AioAWSResponse(
         url='',
         status_code=500,
@@ -1507,7 +1532,7 @@ async def test_connection__make_api_call__wraps_verbose_client_error_transact(se
             ],
         })
     assert (
-            'on request () on table (table_one,table_two) when calling the TransactWriteItems operation'
+            'on table (table_one,table_two) when calling the TransactWriteItems operation'
             in str(excinfo.value)
     )
 
@@ -1588,9 +1613,9 @@ async def test_connection_make_api_call__retries_properly(send_mock):
 @pytest.mark.asyncio
 async def test_connection__botocore_config():
     c = Connection(connect_timeout_seconds=5, read_timeout_seconds=10, max_pool_connections=20)
-    assert (await c.client)._client_config.connect_timeout == 5
-    assert (await c.client)._client_config.read_timeout == 10
-    assert (await c.client)._client_config.max_pool_connections == 20
+    assert (await c.client())._client_config.connect_timeout == 5
+    assert (await c.client())._client_config.read_timeout == 10
+    assert (await c.client())._client_config.max_pool_connections == 20
 
 
 @freeze_time()
@@ -1692,7 +1717,6 @@ async def test_connection_make_api_call__binary_attributes(send_mock):
         }
     })
 
-    # Create the main response mock using our custom class
     resp = MockResponse(
         spec=AioAWSResponse,
         status_code=200,
@@ -1703,9 +1727,9 @@ async def test_connection_make_api_call__binary_attributes(send_mock):
 
     send_mock.return_value = resp
 
-    conn = Connection()
+    conn = Connection(REGION)
 
-    resp = await conn._make_api_call('BatchWriteItem', {})
+    resp = await conn._make_api_call('BatchWriteItem', {'RequestItems': {}})
 
     assert resp['UnprocessedItems']['someTable'] == [{
         'PutRequest': {
@@ -1724,3 +1748,66 @@ async def test_connection_update_time_to_live__fail():
         req.side_effect = BotoCoreError
         with pytest.raises(TableError):
             await conn.update_time_to_live('test table', 'my_ttl')
+
+
+@pytest.mark.asyncio
+async def test_connection_close():
+    """close() cleans up client and state."""
+    session_mock = make_session_mock()
+    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+        conn = Connection(REGION)
+        await conn.client()
+        assert conn._client is not None
+
+        await conn.close()
+        assert conn._client is None
+        assert conn._client_loop is None
+
+
+@pytest.mark.asyncio
+async def test_connection_close_idempotent():
+    """close() can be called multiple times without error."""
+    session_mock = make_session_mock()
+    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+        conn = Connection(REGION)
+        await conn.client()
+
+        await conn.close()
+        await conn.close()
+        assert conn._client is None
+
+
+@pytest.mark.asyncio
+async def test_connection_close_without_client():
+    """close() on a connection that was never initialized does not raise."""
+    conn = Connection(REGION)
+    await conn.close()
+    assert conn._client is None
+
+
+@pytest.mark.asyncio
+async def test_connection_async_context_manager():
+    """Connection works as an async context manager."""
+    session_mock = make_session_mock()
+    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+        async with Connection(REGION) as conn:
+            await conn.client()
+            assert conn._client is not None
+        assert conn._client is None
+
+
+@pytest.mark.asyncio
+async def test_connection_client_recreated_after_close():
+    """client() works normally after close()."""
+    session_mock = make_session_mock()
+    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+        conn = Connection(REGION)
+
+        await conn.client()
+        assert conn._client is not None
+
+        await conn.close()
+        assert conn._client is None
+
+        await conn.client()
+        assert conn._client is not None

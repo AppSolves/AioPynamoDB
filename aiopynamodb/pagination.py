@@ -7,6 +7,18 @@ from aiopynamodb.constants import (CAMEL_COUNT, ITEMS, LAST_EVALUATED_KEY, SCANN
 _T = TypeVar('_T')
 
 
+class _AsyncioTimeModule:
+    """Default time module using asyncio.get_running_loop()."""
+
+    @staticmethod
+    def get_event_loop():
+        return asyncio.get_running_loop()
+
+    @staticmethod
+    async def sleep(seconds):
+        await asyncio.sleep(seconds)
+
+
 class RateLimiter:
     """
     RateLimiter limits operations to a pre-set rate of units/seconds
@@ -28,7 +40,7 @@ class RateLimiter:
         self._rate_limit = rate_limit
         self._consumed = 0
         self._time_of_last_acquire = 0.0
-        self._time_module: Any = time_module or asyncio
+        self._time_module: Any = time_module or _AsyncioTimeModule()
 
     def consume(self, units: int) -> None:
         """

@@ -1,15 +1,15 @@
-pytest>=6
-pytest-env
-pytest-mock
-freezegun
-pytest-asyncio
+pytest>=9.1.1
+pytest-env>=1.6.0
+pytest-mock>=3.15.1
+freezegun>=1.5.5
+pytest-asyncio>=1.4.0
 
 # only used in CI
-coveralls
-mypy==1.2.0
-typing-extensions==4.5.0
-pytest-cov
-blinker==1.6.2
+coveralls>=4.1.0
+mypy>=2.1.0
+typing-extensions>=4.15.0
+pytest-cov>=7.1.0
+blinker>=1.9.0,<2.0
 
 # used for type-checking
-botocore-stubs
+botocore-stubs>=1.43.14

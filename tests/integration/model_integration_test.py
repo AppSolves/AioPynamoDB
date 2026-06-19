@@ -109,6 +109,7 @@ async def test_model_integration(ddb_url):
 
     print(await query_obj.update([TestModel.view.add(1)], condition=TestModel.forum.exists()))
     await TestModel.delete_table()
+    await TestModel.close_connection()
 
 
 def test_can_inherit_version_attribute(ddb_url) -> None:

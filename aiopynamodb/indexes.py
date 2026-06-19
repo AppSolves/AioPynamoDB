@@ -1,5 +1,5 @@
 """
-PynamoDB Indexes
+AioPynamoDB Indexes
 """
 from inspect import getmembers
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar

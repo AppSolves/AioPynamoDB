@@ -3,8 +3,8 @@ from pathlib import Path
 from setuptools import find_packages, setup
 
 install_requires = [
-    "aiobotocore>=2.24.1",
-    'typing-extensions>=4; python_version<"3.11"',
+    "aiobotocore>=3.7.0,<4",
+    'typing-extensions>=4.15.0; python_version<"3.11"',
 ]
 
 setup(
@@ -18,10 +18,11 @@ setup(
             "tests.integration",
         )
     ),
-    url="http://jlafon.io/pynamodb.html",
+    url="https://github.com/AppSolves/AioPynamoDB",
     project_urls={
-        "Fork": "https://github.com/AppSolves/AioPynamoDB",
-        "Original": "https://github.com/brunobelloni/AioPynamoDB",
+        "Source": "https://github.com/AppSolves/AioPynamoDB",
+        "Issues": "https://github.com/AppSolves/AioPynamoDB/issues",
+        "Upstream": "https://github.com/brunobelloni/AioPynamoDB",
     },
     author="Jharrod LaFon",
     author_email="jlafon@eyesopen.com",

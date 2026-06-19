@@ -1,5 +1,5 @@
 """
-PynamoDB lowest level connection
+AioPynamoDB lowest level connection
 """
 
 from aiopynamodb.connection.base import Connection

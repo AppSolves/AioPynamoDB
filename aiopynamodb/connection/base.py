@@ -2,10 +2,9 @@
 Lowest level connection
 """
 import asyncio
-import functools
+import contextlib
 import logging
 import uuid
-from threading import local
 from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 import aiobotocore.client
@@ -14,7 +13,6 @@ from aiobotocore.session import get_session
 from botocore.client import ClientError
 from botocore.exceptions import BotoCoreError
 
-from aiopynamodb.connection._aiobotocore_patch import _patch_aiobotocore
 from aiopynamodb.connection._botocore_private import BotocoreBaseClientPrivate
 from aiopynamodb.constants import (
     RETURN_CONSUMED_CAPACITY_VALUES, RETURN_ITEM_COLL_METRICS_VALUES,
@@ -51,22 +49,12 @@ from aiopynamodb.settings import get_settings_value
 from aiopynamodb.signals import pre_dynamodb_send, post_dynamodb_send
 from aiopynamodb.types import HASH, RANGE
 
-_patch_aiobotocore()
-
 BOTOCORE_EXCEPTIONS = (BotoCoreError, ClientError)
 RATE_LIMITING_ERROR_CODES = ['ProvisionedThroughputExceededException', 'ThrottlingException']
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
-
-def async_property(func):
-    @property
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
-
-    return wrapper
 
 
 class MetaTable(object):
@@ -266,10 +254,9 @@ class Connection(object):
                  aws_session_token: Optional[str] = None):
         self._tables: Dict[str, MetaTable] = {}
         self.host = host
-        self._local = local()
         self._client: Optional[BotocoreBaseClientPrivate] = None
         self._client_loop: Optional[asyncio.AbstractEventLoop] = None
-        self.client_context = None
+        self._exit_stack: contextlib.AsyncExitStack = contextlib.AsyncExitStack()
         self._convert_to_request_dict__endpoint_url = False
         if region:
             self.region = region
@@ -309,15 +296,18 @@ class Connection(object):
         return f"Connection<{self.host}>"
 
     def __del__(self):
-        try:
-            asyncio.run(self.close())
-        except RuntimeError:
+        if self._client is not None:
             try:
                 loop = asyncio.get_running_loop()
-                if loop.is_running():
-                    loop.create_task(self.close())
+                loop.create_task(self.close())
             except RuntimeError:
                 pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
 
     async def dispatch(self, operation_name: str, operation_kwargs: Dict) -> Dict:
         """
@@ -361,7 +351,7 @@ class Connection(object):
 
     async def _make_api_call(self, operation_name: str, operation_kwargs: Dict) -> Dict:
         try:
-            client = await self.client
+            client = await self.client()
             return await client._make_api_call(operation_name, operation_kwargs)
         except ClientError as e:
             resp_metadata = e.response.get('ResponseMetadata', {}).get('HTTPHeaders', {})
@@ -415,17 +405,13 @@ class Connection(object):
                 )
         return self._session
 
-    @async_property
     async def client(self) -> BotocoreBaseClientPrivate:
         """
         Returns a aiobotocore dynamodb client
         """
-        current_loop = asyncio.get_event_loop()
+        current_loop = asyncio.get_running_loop()
         if self._client is not None and self._client_loop is not current_loop:
             await self.close()
-            self._client = None
-            self._client_loop = None
-            print('closed client')
 
         if not self._client or (self._client._request_signer and not self._client._request_signer._credentials):
             config = botocore.client.Config(
@@ -438,25 +424,28 @@ class Connection(object):
                     'mode': 'standard',
                 }
             )
-            self.client_context = self.session.create_client(
-                service_name=SERVICE_NAME,
-                region_name=self.region,
-                endpoint_url=self.host,
-                config=config,
+            self._client = await self._exit_stack.enter_async_context(
+                self.session.create_client(
+                    service_name=SERVICE_NAME,
+                    region_name=self.region,
+                    endpoint_url=self.host,
+                    config=config,
+                )
             )
-            # Async enter to get the client
-            self._client = await self.client_context.__aenter__()
             self._client.meta.events.register_first('before-send.*.*', self._before_send)
             self._client_loop = current_loop
 
         return self._client
 
     async def close(self):
-        """Close the client if it exists."""
+        """Close the underlying aiobotocore client and release HTTP connections."""
         if self._client:
-            await self.client_context.__aexit__(None, None, None)
-            self._client = None
-            self._client_loop = None
+            try:
+                await self._exit_stack.aclose()
+            finally:
+                self._client = None
+                self._client_loop = None
+                self._exit_stack = contextlib.AsyncExitStack()
 
     def add_meta_table(self, meta_table: MetaTable) -> None:
         """

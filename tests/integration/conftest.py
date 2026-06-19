@@ -1,6 +1,4 @@
-import asyncio
 import os
-import warnings
 
 import pytest
 
@@ -19,14 +17,3 @@ def ddb_url():
     """
     ddb_url = os.getenv("PYNAMODB_INTEGRATION_TEST_DDB_URL")
     return "http://localhost:8000" if ddb_url is None else ddb_url
-
-
-@pytest.fixture(autouse=True)
-def ignore_pytest_asyncio_warnings():
-    warnings.filterwarnings("ignore", category=DeprecationWarning, module="pytest_asyncio.plugin")
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop

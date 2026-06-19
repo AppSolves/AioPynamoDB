@@ -1,5 +1,5 @@
 """
-PynamoDB attributes
+AioPynamoDB attributes
 """
 import base64
 import calendar
@@ -72,14 +72,14 @@ class Attribute(Generic[_T]):
       the attribute is persisted with a `None` value.
 
       .. note::
-         This is different from :class:`pynamodb.attributes.NullAttribute`, which manifests in a `NULL`-typed
+         This is different from :class:`aiopynamodb.attributes.NullAttribute`, which manifests in a `NULL`-typed
          DynamoDB attribute value.
 
     :param default: A default value that will be assigned in new models (when they are initialized)
       and existing models (when they are loaded).
 
       .. note::
-         Starting with PynamoDB 6.0, the default must be either an immutable value (of one of the built-in
+         Starting with AioPynamoDB 1.0 (PynamoDB 6.0), the default must be either an immutable value (of one of the built-in
          immutable types) or a callable. This prevents a common class of errors caused by unintentionally mutating
          the default value. A simple workaround is to pass an initializer (e.g. change :code:`default={}` to
          :code:`default=dict`) or wrap in a lambda (e.g. change :code:`default={'foo': 'bar'}` to
@@ -89,7 +89,7 @@ class Attribute(Generic[_T]):
       for new models that you don't want to apply to existing models when they are loaded and then re-saved.
 
       .. note::
-         Starting with PynamoDB 6.0, the default must be either an immutable value (of one of the built-in
+         Starting with AioPynamoDB 1.0 (PynamoDB 6.0), the default must be either an immutable value (of one of the built-in
          immutable types) or a callable.
 
     :param attr_name: The name that is used for the attribute in the underlying DynamoDB item;
@@ -116,12 +116,12 @@ class Attribute(Generic[_T]):
         if not callable(default) and not isinstance(default, _IMMUTABLE_TYPES):
             raise ValueError(
                 f"An attribute's 'default' must be immutable ({_IMMUTABLE_TYPE_NAMES}) or a callable "
-                "(see https://pynamodb.readthedocs.io/en/latest/api.html#pynamodb.attributes.Attribute)"
+                "(see https://pynamodb.readthedocs.io/en/latest/api.html#aiopynamodb.attributes.Attribute)"
             )
         if not callable(default_for_new) and not isinstance(default_for_new, _IMMUTABLE_TYPES):
             raise ValueError(
                 f"An attribute's 'default_for_new' must be immutable ({_IMMUTABLE_TYPE_NAMES}) or a callable "
-                "(see https://pynamodb.readthedocs.io/en/latest/api.html#pynamodb.attributes.Attribute)"
+                "(see https://pynamodb.readthedocs.io/en/latest/api.html#aiopynamodb.attributes.Attribute)"
             )
         self.default = default
         self.default_for_new = default_for_new
@@ -606,8 +606,8 @@ class BinaryAttribute(Attribute[bytes]):
     An attribute containing a binary data object (:code:`bytes`).
 
     :param legacy_encoding: If :code:`True`, inefficient legacy encoding will be used to maintain compatibility
-      with PynamoDB 5 and lower. Set to :code:`False` for new tables and models, and always set to :code:`False`
-      within :class:`~pynamodb.attributes.MapAttribute`.
+      with PynamoDB 5 (pre-fork) and lower. Set to :code:`False` for new tables and models, and always set to :code:`False`
+      within :class:`~aioaiopynamodb.attributes.MapAttribute`.
 
       For more details, see :doc:`upgrading_binary`.
     """
@@ -633,8 +633,8 @@ class BinarySetAttribute(Attribute[Set[bytes]]):
     An attribute containing a set of binary data objects (:code:`bytes`).
 
     :param legacy_encoding: If :code:`True`, inefficient legacy encoding will be used to maintain compatibility
-      with PynamoDB 5 and lower. Set to :code:`False` for new tables and models, and always set to :code:`False`
-      within :class:`~pynamodb.attributes.MapAttribute`.
+      with PynamoDB 5 (pre-fork) and lower. Set to :code:`False` for new tables and models, and always set to :code:`False`
+      within :class:`~aioaiopynamodb.attributes.MapAttribute`.
 
       For more details, see :doc:`upgrading_binary`.
     """
