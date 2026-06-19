@@ -1958,19 +1958,3 @@ async def test_connection_client_recreated_after_close():
 
         await conn.client()
         assert conn._client is not None
-
-
-async def test_connection_client_recreated_after_close():
-    """client() works normally after close()."""
-    session_mock = make_session_mock()
-    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
-        conn = Connection(REGION)
-
-        await conn.client()
-        assert conn._client is not None
-
-        await conn.close()
-        assert conn._client is None
-
-        await conn.client()
-        assert conn._client is not None

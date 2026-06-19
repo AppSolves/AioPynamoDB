@@ -1,0 +1,2 @@
+mypy>=2.1.0
+botocore-stubs>=1.43.14

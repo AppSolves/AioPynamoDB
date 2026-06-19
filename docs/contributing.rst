@@ -16,6 +16,12 @@ virtualenvs, but a minimal example is shown below.
   $ virtualenv -p python3 venv && source venv/bin/activate
   $ pip install -e .[signals] -r requirements-dev.txt
 
+Type checking dependencies are kept separate so the core dev/test install remains compatible with the full CI matrix, including PyPy:
+
+.. code-block:: bash
+
+  $ pip install -r requirements-typecheck.txt
+
 
 A java runtime is required to run the integration tests. After installing java, download and untar the
 mock dynamodb server like so:
