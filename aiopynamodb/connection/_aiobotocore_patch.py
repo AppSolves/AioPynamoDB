@@ -13,7 +13,9 @@ def _patch_aiobotocore() -> None:
     except ImportError:
         httpx = None
 
-    async def _fixed_check_response(self, attempt_number, response):
+    async def _fixed_check_response(
+        self: aiobotocore.retryhandler.AioCRC32Checker, attempt_number, response
+    ):
         http_response = response[0]
         expected_crc = http_response.headers.get(self._header_name)
         if expected_crc is None:
