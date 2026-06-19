@@ -1,6 +1,7 @@
 """
 Tests for the base connection class
 """
+
 import base64
 import json
 from unittest import mock
@@ -17,17 +18,31 @@ from freezegun import freeze_time
 from aiopynamodb.connection import Connection
 from aiopynamodb.connection.base import MetaTable
 from aiopynamodb.constants import (
-    UNPROCESSED_ITEMS, STRING, BINARY, DEFAULT_ENCODING, TABLE_KEY,
-    PAY_PER_REQUEST_BILLING_MODE)
+    BINARY,
+    DEFAULT_ENCODING,
+    PAY_PER_REQUEST_BILLING_MODE,
+    STRING,
+    TABLE_KEY,
+    UNPROCESSED_ITEMS,
+)
 from aiopynamodb.exceptions import (
-    TableError, DeleteError, PutError, ScanError, GetError, UpdateError, TableDoesNotExist, VerboseClientError)
+    DeleteError,
+    GetError,
+    PutError,
+    ScanError,
+    TableDoesNotExist,
+    TableError,
+    UpdateError,
+    VerboseClientError,
+)
 from aiopynamodb.expressions.operand import Path, Value
 from aiopynamodb.expressions.update import SetAction
+
 from .data import DESCRIBE_TABLE_DATA, GET_ITEM_DATA, LIST_TABLE_DATA
 
-PATCH_METHOD = 'aiopynamodb.connection.Connection._make_api_call'
-TEST_TABLE_NAME = DESCRIBE_TABLE_DATA['Table']['TableName']
-REGION = 'us-east-1'
+PATCH_METHOD = "aiopynamodb.connection.Connection._make_api_call"
+TEST_TABLE_NAME = DESCRIBE_TABLE_DATA["Table"]["TableName"]
+REGION = "us-east-1"
 
 
 # Create a class to handle the async content property
@@ -78,9 +93,9 @@ def test_meta_table_get_key_names__index(meta_table):
 
 
 def test_meta_table_get_attribute_type(meta_table):
-    assert meta_table.get_attribute_type('ForumName') == 'S'
+    assert meta_table.get_attribute_type("ForumName") == "S"
     with pytest.raises(ValueError):
-        meta_table.get_attribute_type('wrongone')
+        meta_table.get_attribute_type("wrongone")
 
 
 def test_meta_table_has_index_name(meta_table):
@@ -91,9 +106,9 @@ def test_meta_table_has_index_name(meta_table):
 @pytest.mark.asyncio
 async def test_connection__create():
     _ = Connection()
-    conn = Connection(host='http://foohost')
+    conn = Connection(host="http://foohost")
     session_mock = make_session_mock()
-    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
         assert await conn.client()
     assert repr(conn) == "Connection<http://foohost>"
 
@@ -101,30 +116,42 @@ async def test_connection__create():
 @pytest.mark.asyncio
 async def test_connection__subsequent_client_is_not_cached_when_credentials_none():
     session_mock = make_session_mock()
-    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
         conn = Connection()
         (await conn.client())._request_signer._credentials = None
 
         # make two calls to .client method, expect two calls to create client
-        assert (await conn.client())
+        assert await conn.client()
         (await conn.client())
 
         session_mock.create_client.assert_has_calls(
             [
-                mock.call(service_name='dynamodb', region_name=None, endpoint_url=None, config=mock.ANY),
-                mock.call(service_name='dynamodb', region_name=None, endpoint_url=None, config=mock.ANY),
+                mock.call(
+                    service_name="dynamodb",
+                    region_name=None,
+                    endpoint_url=None,
+                    config=mock.ANY,
+                ),
+                mock.call(
+                    service_name="dynamodb",
+                    region_name=None,
+                    endpoint_url=None,
+                    config=mock.ANY,
+                ),
             ],
-            any_order=True
+            any_order=True,
         )
+
 
 # tests/test_base_connection.py::test_connection__subsequent_client_is_not_cached_when_credentials_none
 # tests/test_base_connection.py::test_connection__subsequent_client_is_cached_when_credentials_truthy
 # tests/test_base_connection.py::test_connection__client_is_passed_region_when_set
 
+
 @pytest.mark.asyncio
 async def test_connection__subsequent_client_is_cached_when_credentials_truthy():
     session_mock = make_session_mock()
-    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
         conn = Connection()
 
         # make two calls to .client method, expect one call to create client
@@ -132,7 +159,12 @@ async def test_connection__subsequent_client_is_cached_when_credentials_truthy()
         assert await conn.client()
 
         calls = session_mock.create_client.mock_calls.count(
-            mock.call(service_name='dynamodb', region_name=None, endpoint_url=None, config=mock.ANY)
+            mock.call(
+                service_name="dynamodb",
+                region_name=None,
+                endpoint_url=None,
+                config=mock.ANY,
+            )
         )
         assert calls == 1
 
@@ -140,13 +172,18 @@ async def test_connection__subsequent_client_is_cached_when_credentials_truthy()
 @pytest.mark.asyncio
 async def test_connection__client_is_passed_region_when_set():
     session_mock = make_session_mock()
-    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
         conn = Connection(REGION)
 
-        assert (await conn.client())
+        assert await conn.client()
 
         calls = session_mock.create_client.mock_calls.count(
-            mock.call(service_name='dynamodb', region_name=REGION, endpoint_url=None, config=mock.ANY)
+            mock.call(
+                service_name="dynamodb",
+                region_name=REGION,
+                endpoint_url=None,
+                config=mock.ANY,
+            )
         )
         assert calls == 1
 
@@ -158,61 +195,34 @@ async def test_connection_create_table():
     """
     conn = Connection(REGION)
     kwargs = {
-        'read_capacity_units': 1,
-        'write_capacity_units': 1,
+        "read_capacity_units": 1,
+        "write_capacity_units": 1,
     }
     with pytest.raises(ValueError) as e:
         await conn.create_table(TEST_TABLE_NAME, **kwargs)
 
-    kwargs['attribute_definitions'] = [
-        {
-            'attribute_name': 'key1',
-            'attribute_type': 'S'
-        },
-        {
-            'attribute_name': 'key2',
-            'attribute_type': 'S'
-        }
+    kwargs["attribute_definitions"] = [
+        {"attribute_name": "key1", "attribute_type": "S"},
+        {"attribute_name": "key2", "attribute_type": "S"},
     ]
     with pytest.raises(ValueError):
         await conn.create_table(TEST_TABLE_NAME, **kwargs)
 
-    kwargs['key_schema'] = [
-        {
-            'attribute_name': 'key1',
-            'key_type': 'hash'
-        },
-        {
-            'attribute_name': 'key2',
-            'key_type': 'range'
-        }
+    kwargs["key_schema"] = [
+        {"attribute_name": "key1", "key_type": "hash"},
+        {"attribute_name": "key2", "key_type": "range"},
     ]
     params = {
-        'TableName': TEST_TABLE_NAME,
-        'ProvisionedThroughput': {
-            'WriteCapacityUnits': 1,
-            'ReadCapacityUnits': 1
-        },
-        'AttributeDefinitions': [
-            {
-                'AttributeType': 'S',
-                'AttributeName': 'key1'
-            },
-            {
-                'AttributeType': 'S',
-                'AttributeName': 'key2'
-            }
+        "TableName": TEST_TABLE_NAME,
+        "ProvisionedThroughput": {"WriteCapacityUnits": 1, "ReadCapacityUnits": 1},
+        "AttributeDefinitions": [
+            {"AttributeType": "S", "AttributeName": "key1"},
+            {"AttributeType": "S", "AttributeName": "key2"},
         ],
-        'KeySchema': [
-            {
-                'KeyType': 'HASH',
-                'AttributeName': 'key1'
-            },
-            {
-                'KeyType': 'RANGE',
-                'AttributeName': 'key2'
-            }
-        ]
+        "KeySchema": [
+            {"KeyType": "HASH", "AttributeName": "key1"},
+            {"KeyType": "RANGE", "AttributeName": "key2"},
+        ],
     }
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
@@ -221,110 +231,79 @@ async def test_connection_create_table():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        await conn.create_table(
-            TEST_TABLE_NAME,
-            **kwargs
-        )
+        await conn.create_table(TEST_TABLE_NAME, **kwargs)
         assert req.call_args[0][1] == params
 
-    kwargs['global_secondary_indexes'] = [
+    kwargs["global_secondary_indexes"] = [
         {
-            'index_name': 'alt-index',
-            'key_schema': [
-                {
-                    'KeyType': 'HASH',
-                    'AttributeName': 'AltKey'
-                }
-            ],
-            'projection': {
-                'ProjectionType': 'KEYS_ONLY'
-            },
-            'provisioned_throughput': {
-                'ReadCapacityUnits': 1,
-                'WriteCapacityUnits': 1,
+            "index_name": "alt-index",
+            "key_schema": [{"KeyType": "HASH", "AttributeName": "AltKey"}],
+            "projection": {"ProjectionType": "KEYS_ONLY"},
+            "provisioned_throughput": {
+                "ReadCapacityUnits": 1,
+                "WriteCapacityUnits": 1,
             },
         }
     ]
-    params['GlobalSecondaryIndexes'] = [{'IndexName': 'alt-index', 'Projection': {'ProjectionType': 'KEYS_ONLY'},
-                                         'KeySchema': [{'AttributeName': 'AltKey', 'KeyType': 'HASH'}],
-                                         'ProvisionedThroughput': {'ReadCapacityUnits': 1,
-                                                                   'WriteCapacityUnits': 1}}]
+    params["GlobalSecondaryIndexes"] = [
+        {
+            "IndexName": "alt-index",
+            "Projection": {"ProjectionType": "KEYS_ONLY"},
+            "KeySchema": [{"AttributeName": "AltKey", "KeyType": "HASH"}],
+            "ProvisionedThroughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 1},
+        }
+    ]
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        await conn.create_table(
-            TEST_TABLE_NAME,
-            **kwargs
-        )
+        await conn.create_table(TEST_TABLE_NAME, **kwargs)
         # Ensure that the hash key is first when creating indexes
-        assert req.call_args[0][1]['GlobalSecondaryIndexes'][0]['KeySchema'][0]['KeyType'] == 'HASH'
+        assert (
+            req.call_args[0][1]["GlobalSecondaryIndexes"][0]["KeySchema"][0]["KeyType"]
+            == "HASH"
+        )
         assert req.call_args[0][1] == params
-    del (kwargs['global_secondary_indexes'])
-    del (params['GlobalSecondaryIndexes'])
+    del kwargs["global_secondary_indexes"]
+    del params["GlobalSecondaryIndexes"]
 
-    kwargs['local_secondary_indexes'] = [
+    kwargs["local_secondary_indexes"] = [
         {
-            'index_name': 'alt-index',
-            'projection': {
-                'ProjectionType': 'KEYS_ONLY'
-            },
-            'key_schema': [
-                {
-                    'AttributeName': 'AltKey', 'KeyType': 'HASH'
-                }
-            ],
-            'provisioned_throughput': {
-                'ReadCapacityUnits': 1,
-                'WriteCapacityUnits': 1
-            }
+            "index_name": "alt-index",
+            "projection": {"ProjectionType": "KEYS_ONLY"},
+            "key_schema": [{"AttributeName": "AltKey", "KeyType": "HASH"}],
+            "provisioned_throughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 1},
         }
     ]
-    params['LocalSecondaryIndexes'] = [
+    params["LocalSecondaryIndexes"] = [
         {
-            'Projection': {
-                'ProjectionType': 'KEYS_ONLY'
-            },
-            'KeySchema': [
-                {
-                    'KeyType': 'HASH',
-                    'AttributeName': 'AltKey'
-                }
-            ],
-            'IndexName': 'alt-index'
+            "Projection": {"ProjectionType": "KEYS_ONLY"},
+            "KeySchema": [{"KeyType": "HASH", "AttributeName": "AltKey"}],
+            "IndexName": "alt-index",
         }
     ]
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        await conn.create_table(
-            TEST_TABLE_NAME,
-            **kwargs
-        )
+        await conn.create_table(TEST_TABLE_NAME, **kwargs)
         assert req.call_args[0][1] == params
 
-    kwargs['stream_specification'] = {
-        'stream_enabled': True,
-        'stream_view_type': 'NEW_IMAGE'
+    kwargs["stream_specification"] = {
+        "stream_enabled": True,
+        "stream_view_type": "NEW_IMAGE",
     }
-    params['StreamSpecification'] = {
-        'StreamEnabled': True,
-        'StreamViewType': 'NEW_IMAGE'
+    params["StreamSpecification"] = {
+        "StreamEnabled": True,
+        "StreamViewType": "NEW_IMAGE",
     }
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        await conn.create_table(
-            TEST_TABLE_NAME,
-            **kwargs
-        )
+        await conn.create_table(TEST_TABLE_NAME, **kwargs)
         assert req.call_args[0][1] == params
 
-    kwargs['billing_mode'] = PAY_PER_REQUEST_BILLING_MODE
-    params['BillingMode'] = PAY_PER_REQUEST_BILLING_MODE
-    del params['ProvisionedThroughput']
+    kwargs["billing_mode"] = PAY_PER_REQUEST_BILLING_MODE
+    params["BillingMode"] = PAY_PER_REQUEST_BILLING_MODE
+    del params["ProvisionedThroughput"]
     with patch(PATCH_METHOD) as req:
         req.return_value = None
-        await conn.create_table(
-            TEST_TABLE_NAME,
-            **kwargs
-        )
+        await conn.create_table(TEST_TABLE_NAME, **kwargs)
         assert req.call_args[0][1] == params
 
 
@@ -333,7 +312,7 @@ async def test_connection_delete_table():
     """
     Connection.delete_table
     """
-    params = {'TableName': TEST_TABLE_NAME}
+    params = {"TableName": TEST_TABLE_NAME}
     with patch(PATCH_METHOD) as req:
         req.return_value = None
         conn = Connection(REGION)
@@ -357,16 +336,11 @@ async def test_connection_update_table():
         req.return_value = None
         conn = Connection(REGION)
         params = {
-            'ProvisionedThroughput': {
-                'WriteCapacityUnits': 2,
-                'ReadCapacityUnits': 2
-            },
-            'TableName': TEST_TABLE_NAME,
+            "ProvisionedThroughput": {"WriteCapacityUnits": 2, "ReadCapacityUnits": 2},
+            "TableName": TEST_TABLE_NAME,
         }
         await conn.update_table(
-            TEST_TABLE_NAME,
-            read_capacity_units=2,
-            write_capacity_units=2
+            TEST_TABLE_NAME, read_capacity_units=2, write_capacity_units=2
         )
         assert req.call_args[0][1] == params
 
@@ -377,7 +351,9 @@ async def test_connection_update_table():
         req.side_effect = BotoCoreError
         conn = Connection(REGION)
         with pytest.raises(TableError):
-            await conn.update_table(TEST_TABLE_NAME, read_capacity_units=2, write_capacity_units=2)
+            await conn.update_table(
+                TEST_TABLE_NAME, read_capacity_units=2, write_capacity_units=2
+            )
 
     with patch(PATCH_METHOD) as req:
         req.return_value = None
@@ -387,33 +363,32 @@ async def test_connection_update_table():
             {
                 "index_name": "foo-index",
                 "read_capacity_units": 2,
-                "write_capacity_units": 2
+                "write_capacity_units": 2,
             }
         ]
         params = {
-            'TableName': TEST_TABLE_NAME,
-            'ProvisionedThroughput': {
-                'ReadCapacityUnits': 2,
-                'WriteCapacityUnits': 2,
+            "TableName": TEST_TABLE_NAME,
+            "ProvisionedThroughput": {
+                "ReadCapacityUnits": 2,
+                "WriteCapacityUnits": 2,
             },
-            'GlobalSecondaryIndexUpdates': [
+            "GlobalSecondaryIndexUpdates": [
                 {
-                    'Update': {
-                        'IndexName': 'foo-index',
-                        'ProvisionedThroughput': {
-                            'ReadCapacityUnits': 2,
-                            'WriteCapacityUnits': 2,
-                        }
+                    "Update": {
+                        "IndexName": "foo-index",
+                        "ProvisionedThroughput": {
+                            "ReadCapacityUnits": 2,
+                            "WriteCapacityUnits": 2,
+                        },
                     }
                 }
-
-            ]
+            ],
         }
         await conn.update_table(
             TEST_TABLE_NAME,
             read_capacity_units=2,
             write_capacity_units=2,
-            global_secondary_index_updates=global_secondary_index_updates
+            global_secondary_index_updates=global_secondary_index_updates,
         )
         assert req.call_args[0][1] == params
 
@@ -427,12 +402,19 @@ async def test_connection_describe_table():
         req.return_value = DESCRIBE_TABLE_DATA
         conn = Connection(REGION)
         await conn.describe_table(TEST_TABLE_NAME)
-        assert req.call_args[0][1] == {'TableName': TEST_TABLE_NAME}
+        assert req.call_args[0][1] == {"TableName": TEST_TABLE_NAME}
 
     with pytest.raises(TableDoesNotExist):
         with patch(PATCH_METHOD) as req:
-            req.side_effect = ClientError({'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Not Found'}},
-                                          "DescribeTable")
+            req.side_effect = ClientError(
+                {
+                    "Error": {
+                        "Code": "ResourceNotFoundException",
+                        "Message": "Not Found",
+                    }
+                },
+                "DescribeTable",
+            )
             conn = Connection(REGION)
             await conn.describe_table(TEST_TABLE_NAME)
 
@@ -445,14 +427,14 @@ async def test_connection_list_tables():
     with patch(PATCH_METHOD) as req:
         req.return_value = LIST_TABLE_DATA
         conn = Connection(REGION)
-        await conn.list_tables(exclusive_start_table_name='Thread')
-        assert req.call_args[0][1] == {'ExclusiveStartTableName': 'Thread'}
+        await conn.list_tables(exclusive_start_table_name="Thread")
+        assert req.call_args[0][1] == {"ExclusiveStartTableName": "Thread"}
 
     with patch(PATCH_METHOD) as req:
         req.return_value = LIST_TABLE_DATA
         conn = Connection(REGION)
         await conn.list_tables(limit=3)
-        assert req.call_args[0][1] == {'Limit': 3}
+        assert req.call_args[0][1] == {"Limit": 3}
 
     with patch(PATCH_METHOD) as req:
         req.return_value = LIST_TABLE_DATA
@@ -484,73 +466,15 @@ async def test_connection_delete_item():
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
         await conn.delete_item(
-            TEST_TABLE_NAME,
-            "Amazon DynamoDB",
-            "How do I update multiple items?")
-        params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'Key': {
-                'ForumName': {
-                    'S': 'Amazon DynamoDB'
-                },
-                'Subject': {
-                    'S': 'How do I update multiple items?'
-                }
-            },
-            'TableName': TEST_TABLE_NAME}
-        assert req.call_args[0][1] == params
-
-    with patch(PATCH_METHOD) as req:
-        req.return_value = {}
-        await conn.delete_item(
-            TEST_TABLE_NAME,
-            "Amazon DynamoDB",
-            "How do I update multiple items?",
-            return_values='ALL_NEW'
+            TEST_TABLE_NAME, "Amazon DynamoDB", "How do I update multiple items?"
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'Key': {
-                'ForumName': {
-                    'S': 'Amazon DynamoDB'
-                },
-                'Subject': {
-                    'S': 'How do I update multiple items?'
-                }
+            "ReturnConsumedCapacity": "TOTAL",
+            "Key": {
+                "ForumName": {"S": "Amazon DynamoDB"},
+                "Subject": {"S": "How do I update multiple items?"},
             },
-            'TableName': TEST_TABLE_NAME,
-            'ReturnValues': 'ALL_NEW'
-        }
-        assert req.call_args[0][1] == params
-
-    with pytest.raises(ValueError):
-        await conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_values='bad_values')
-
-    with pytest.raises(ValueError):
-        await conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_consumed_capacity='badvalue')
-
-    with pytest.raises(ValueError):
-        await conn.delete_item(TEST_TABLE_NAME, "foo", "bar", return_item_collection_metrics='badvalue')
-
-    with patch(PATCH_METHOD) as req:
-        req.return_value = {}
-        await conn.delete_item(
-            TEST_TABLE_NAME,
-            "Amazon DynamoDB",
-            "How do I update multiple items?",
-            return_consumed_capacity='TOTAL'
-        )
-        params = {
-            'Key': {
-                'ForumName': {
-                    'S': 'Amazon DynamoDB'
-                },
-                'Subject': {
-                    'S': 'How do I update multiple items?'
-                }
-            },
-            'TableName': TEST_TABLE_NAME,
-            'ReturnConsumedCapacity': 'TOTAL'
+            "TableName": TEST_TABLE_NAME,
         }
         assert req.call_args[0][1] == params
 
@@ -560,20 +484,49 @@ async def test_connection_delete_item():
             TEST_TABLE_NAME,
             "Amazon DynamoDB",
             "How do I update multiple items?",
-            return_item_collection_metrics='SIZE'
+            return_values="ALL_NEW",
         )
         params = {
-            'Key': {
-                'ForumName': {
-                    'S': 'Amazon DynamoDB'
-                },
-                'Subject': {
-                    'S': 'How do I update multiple items?'
-                }
+            "ReturnConsumedCapacity": "TOTAL",
+            "Key": {
+                "ForumName": {"S": "Amazon DynamoDB"},
+                "Subject": {"S": "How do I update multiple items?"},
             },
-            'TableName': TEST_TABLE_NAME,
-            'ReturnItemCollectionMetrics': 'SIZE',
-            'ReturnConsumedCapacity': 'TOTAL'
+            "TableName": TEST_TABLE_NAME,
+            "ReturnValues": "ALL_NEW",
+        }
+        assert req.call_args[0][1] == params
+
+    with pytest.raises(ValueError):
+        await conn.delete_item(
+            TEST_TABLE_NAME, "foo", "bar", return_values="bad_values"
+        )
+
+    with pytest.raises(ValueError):
+        await conn.delete_item(
+            TEST_TABLE_NAME, "foo", "bar", return_consumed_capacity="badvalue"
+        )
+
+    with pytest.raises(ValueError):
+        await conn.delete_item(
+            TEST_TABLE_NAME, "foo", "bar", return_item_collection_metrics="badvalue"
+        )
+
+    with patch(PATCH_METHOD) as req:
+        req.return_value = {}
+        await conn.delete_item(
+            TEST_TABLE_NAME,
+            "Amazon DynamoDB",
+            "How do I update multiple items?",
+            return_consumed_capacity="TOTAL",
+        )
+        params = {
+            "Key": {
+                "ForumName": {"S": "Amazon DynamoDB"},
+                "Subject": {"S": "How do I update multiple items?"},
+            },
+            "TableName": TEST_TABLE_NAME,
+            "ReturnConsumedCapacity": "TOTAL",
         }
         assert req.call_args[0][1] == params
 
@@ -583,25 +536,38 @@ async def test_connection_delete_item():
             TEST_TABLE_NAME,
             "Amazon DynamoDB",
             "How do I update multiple items?",
-            condition=Path('ForumName').does_not_exist(),
-            return_item_collection_metrics='SIZE'
+            return_item_collection_metrics="SIZE",
         )
         params = {
-            'Key': {
-                'ForumName': {
-                    'S': 'Amazon DynamoDB'
-                },
-                'Subject': {
-                    'S': 'How do I update multiple items?'
-                }
+            "Key": {
+                "ForumName": {"S": "Amazon DynamoDB"},
+                "Subject": {"S": "How do I update multiple items?"},
             },
-            'ConditionExpression': 'attribute_not_exists (#0)',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName'
+            "TableName": TEST_TABLE_NAME,
+            "ReturnItemCollectionMetrics": "SIZE",
+            "ReturnConsumedCapacity": "TOTAL",
+        }
+        assert req.call_args[0][1] == params
+
+    with patch(PATCH_METHOD) as req:
+        req.return_value = {}
+        await conn.delete_item(
+            TEST_TABLE_NAME,
+            "Amazon DynamoDB",
+            "How do I update multiple items?",
+            condition=Path("ForumName").does_not_exist(),
+            return_item_collection_metrics="SIZE",
+        )
+        params = {
+            "Key": {
+                "ForumName": {"S": "Amazon DynamoDB"},
+                "Subject": {"S": "How do I update multiple items?"},
             },
-            'TableName': TEST_TABLE_NAME,
-            'ReturnConsumedCapacity': 'TOTAL',
-            'ReturnItemCollectionMetrics': 'SIZE'
+            "ConditionExpression": "attribute_not_exists (#0)",
+            "ExpressionAttributeNames": {"#0": "ForumName"},
+            "TableName": TEST_TABLE_NAME,
+            "ReturnConsumedCapacity": "TOTAL",
+            "ReturnItemCollectionMetrics": "SIZE",
         }
         assert req.call_args[0][1] == params
 
@@ -612,18 +578,22 @@ async def test_connection_get_item():
     Connection.get_item
     """
     conn = Connection(REGION)
-    table_name = 'Thread'
+    table_name = "Thread"
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with patch(PATCH_METHOD) as req:
         req.return_value = GET_ITEM_DATA
-        item = await conn.get_item(table_name, "Amazon DynamoDB", "How do I update multiple items?")
+        item = await conn.get_item(
+            table_name, "Amazon DynamoDB", "How do I update multiple items?"
+        )
         assert item == GET_ITEM_DATA
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(GetError):
-            await conn.get_item(table_name, "Amazon DynamoDB", "How do I update multiple items?")
+            await conn.get_item(
+                table_name, "Amazon DynamoDB", "How do I update multiple items?"
+            )
 
     with patch(PATCH_METHOD) as req:
         req.return_value = GET_ITEM_DATA
@@ -631,24 +601,18 @@ async def test_connection_get_item():
             table_name,
             "Amazon DynamoDB",
             "How do I update multiple items?",
-            attributes_to_get=['ForumName']
+            attributes_to_get=["ForumName"],
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'ProjectionExpression': '#0',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName'
+            "ReturnConsumedCapacity": "TOTAL",
+            "ProjectionExpression": "#0",
+            "ExpressionAttributeNames": {"#0": "ForumName"},
+            "Key": {
+                "ForumName": {"S": "Amazon DynamoDB"},
+                "Subject": {"S": "How do I update multiple items?"},
             },
-            'Key': {
-                'ForumName': {
-                    'S': 'Amazon DynamoDB'
-                },
-                'Subject': {
-                    'S': 'How do I update multiple items?'
-                }
-            },
-            'ConsistentRead': False,
-            'TableName': 'Thread'
+            "ConsistentRead": False,
+            "TableName": "Thread",
         }
         assert req.call_args[0][1] == params
 
@@ -663,47 +627,33 @@ async def test_connection_update_item():
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with pytest.raises(ValueError):
-        await conn.update_item(TEST_TABLE_NAME, 'foo-key')
+        await conn.update_item(TEST_TABLE_NAME, "foo-key")
 
     with pytest.raises(ValueError):
-        await conn.update_item(TEST_TABLE_NAME, 'foo', actions=[])
+        await conn.update_item(TEST_TABLE_NAME, "foo", actions=[])
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
         await conn.update_item(
             TEST_TABLE_NAME,
-            'foo-key',
-            return_consumed_capacity='TOTAL',
-            return_item_collection_metrics='NONE',
-            return_values='ALL_NEW',
-            actions=[Path('Subject').set('foo-subject')],
-            condition=Path('Forum').does_not_exist(),
-            range_key='foo-range-key',
+            "foo-key",
+            return_consumed_capacity="TOTAL",
+            return_item_collection_metrics="NONE",
+            return_values="ALL_NEW",
+            actions=[Path("Subject").set("foo-subject")],
+            condition=Path("Forum").does_not_exist(),
+            range_key="foo-range-key",
         )
         params = {
-            'ReturnValues': 'ALL_NEW',
-            'ReturnItemCollectionMetrics': 'NONE',
-            'ReturnConsumedCapacity': 'TOTAL',
-            'Key': {
-                'ForumName': {
-                    'S': 'foo-key'
-                },
-                'Subject': {
-                    'S': 'foo-range-key'
-                }
-            },
-            'ConditionExpression': 'attribute_not_exists (#0)',
-            'UpdateExpression': 'SET #1 = :0',
-            'ExpressionAttributeNames': {
-                '#0': 'Forum',
-                '#1': 'Subject'
-            },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'foo-subject'
-                }
-            },
-            'TableName': TEST_TABLE_NAME
+            "ReturnValues": "ALL_NEW",
+            "ReturnItemCollectionMetrics": "NONE",
+            "ReturnConsumedCapacity": "TOTAL",
+            "Key": {"ForumName": {"S": "foo-key"}, "Subject": {"S": "foo-range-key"}},
+            "ConditionExpression": "attribute_not_exists (#0)",
+            "UpdateExpression": "SET #1 = :0",
+            "ExpressionAttributeNames": {"#0": "Forum", "#1": "Subject"},
+            "ExpressionAttributeValues": {":0": {"S": "foo-subject"}},
+            "TableName": TEST_TABLE_NAME,
         }
         assert req.call_args[0][1] == params
 
@@ -713,52 +663,39 @@ async def test_connection_update_item():
         with pytest.raises(ValueError):
             await conn.update_item(
                 TEST_TABLE_NAME,
-                'foo-key',
-                range_key='foo-range-key',
+                "foo-key",
+                range_key="foo-range-key",
             )
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
         await conn.update_item(
             TEST_TABLE_NAME,
-            'foo-key',
-            actions=[Path('Subject').set('Bar')],
-            condition=(Path('ForumName').does_not_exist() & (Path('Subject') == 'Foo')),
-            range_key='foo-range-key',
+            "foo-key",
+            actions=[Path("Subject").set("Bar")],
+            condition=(Path("ForumName").does_not_exist() & (Path("Subject") == "Foo")),
+            range_key="foo-range-key",
         )
         params = {
-            'Key': {
-                'ForumName': {
-                    'S': 'foo-key'
-                },
-                'Subject': {
-                    'S': 'foo-range-key'
-                }
-            },
-            'ConditionExpression': '(attribute_not_exists (#0) AND #1 = :0)',
-            'UpdateExpression': 'SET #1 = :1',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName',
-                '#1': 'Subject'
-            },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'Foo'
-                },
-                ':1': {
-                    'S': 'Bar'
-                }
-            },
-            'ReturnConsumedCapacity': 'TOTAL',
-            'TableName': TEST_TABLE_NAME,
+            "Key": {"ForumName": {"S": "foo-key"}, "Subject": {"S": "foo-range-key"}},
+            "ConditionExpression": "(attribute_not_exists (#0) AND #1 = :0)",
+            "UpdateExpression": "SET #1 = :1",
+            "ExpressionAttributeNames": {"#0": "ForumName", "#1": "Subject"},
+            "ExpressionAttributeValues": {":0": {"S": "Foo"}, ":1": {"S": "Bar"}},
+            "ReturnConsumedCapacity": "TOTAL",
+            "TableName": TEST_TABLE_NAME,
         }
         assert req.call_args[0][1] == params
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(UpdateError):
-            await conn.update_item(TEST_TABLE_NAME, 'foo-key', range_key='foo-range-key',
-                                   actions=[SetAction(Path('bar'), Value('foobar'))])
+            await conn.update_item(
+                TEST_TABLE_NAME,
+                "foo-key",
+                range_key="foo-range-key",
+                actions=[SetAction(Path("bar"), Value("foobar"))],
+            )
 
 
 @pytest.mark.asyncio
@@ -772,74 +709,61 @@ async def test_connection_put_item():
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(TableError):
-            await conn.put_item('foo-key', TEST_TABLE_NAME, return_values='ALL_NEW',
-                                attributes={'ForumName': 'foo-value'})
+            await conn.put_item(
+                "foo-key",
+                TEST_TABLE_NAME,
+                return_values="ALL_NEW",
+                attributes={"ForumName": "foo-value"},
+            )
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
         await conn.put_item(
             TEST_TABLE_NAME,
-            'foo-key',
-            range_key='foo-range-key',
-            return_consumed_capacity='TOTAL',
-            return_item_collection_metrics='SIZE',
-            return_values='ALL_NEW',
-            attributes={'ForumName': 'foo-value'}
+            "foo-key",
+            range_key="foo-range-key",
+            return_consumed_capacity="TOTAL",
+            return_item_collection_metrics="SIZE",
+            return_values="ALL_NEW",
+            attributes={"ForumName": "foo-value"},
         )
         params = {
-            'ReturnValues': 'ALL_NEW',
-            'ReturnConsumedCapacity': 'TOTAL',
-            'ReturnItemCollectionMetrics': 'SIZE',
-            'TableName': TEST_TABLE_NAME,
-            'Item': {
-                'ForumName': {
-                    'S': 'foo-value'
-                },
-                'Subject': {
-                    'S': 'foo-range-key'
-                }
-            }
+            "ReturnValues": "ALL_NEW",
+            "ReturnConsumedCapacity": "TOTAL",
+            "ReturnItemCollectionMetrics": "SIZE",
+            "TableName": TEST_TABLE_NAME,
+            "Item": {
+                "ForumName": {"S": "foo-value"},
+                "Subject": {"S": "foo-range-key"},
+            },
         }
         assert req.call_args[0][1] == params
 
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(PutError):
-            await conn.put_item(TEST_TABLE_NAME, 'foo-key', range_key='foo-range-key',
-                                attributes={'ForumName': 'foo-value'})
+            await conn.put_item(
+                TEST_TABLE_NAME,
+                "foo-key",
+                range_key="foo-range-key",
+                attributes={"ForumName": "foo-value"},
+            )
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
         await conn.put_item(
             TEST_TABLE_NAME,
-            'foo-key',
-            range_key='foo-range-key',
-            attributes={'ForumName': 'foo-value'}
-        )
-        params = {'TableName': TEST_TABLE_NAME,
-                  'ReturnConsumedCapacity': 'TOTAL',
-                  'Item': {'ForumName': {'S': 'foo-value'}, 'Subject': {'S': 'foo-range-key'}}}
-        assert req.call_args[0][1] == params
-
-    with patch(PATCH_METHOD) as req:
-        req.return_value = {}
-        await conn.put_item(
-            TEST_TABLE_NAME,
-            'foo-key',
-            range_key='foo-range-key',
-            attributes={'ForumName': 'foo-value'}
+            "foo-key",
+            range_key="foo-range-key",
+            attributes={"ForumName": "foo-value"},
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'Item': {
-                'ForumName': {
-                    'S': 'foo-value'
-                },
-                'Subject': {
-                    'S': 'foo-range-key'
-                }
+            "TableName": TEST_TABLE_NAME,
+            "ReturnConsumedCapacity": "TOTAL",
+            "Item": {
+                "ForumName": {"S": "foo-value"},
+                "Subject": {"S": "foo-range-key"},
             },
-            'TableName': TEST_TABLE_NAME
         }
         assert req.call_args[0][1] == params
 
@@ -847,35 +771,17 @@ async def test_connection_put_item():
         req.return_value = {}
         await conn.put_item(
             TEST_TABLE_NAME,
-            'item1-hash',
-            range_key='item1-range',
-            attributes={'foo': {'S': 'bar'}},
-            condition=(Path('Forum').does_not_exist() & (Path('Subject') == 'Foo'))
+            "foo-key",
+            range_key="foo-range-key",
+            attributes={"ForumName": "foo-value"},
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'TableName': TEST_TABLE_NAME,
-            'ConditionExpression': '(attribute_not_exists (#0) AND #1 = :0)',
-            'ExpressionAttributeNames': {
-                '#0': 'Forum',
-                '#1': 'Subject'
+            "ReturnConsumedCapacity": "TOTAL",
+            "Item": {
+                "ForumName": {"S": "foo-value"},
+                "Subject": {"S": "foo-range-key"},
             },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'Foo'
-                }
-            },
-            'Item': {
-                'ForumName': {
-                    'S': 'item1-hash'
-                },
-                'foo': {
-                    'S': 'bar'
-                },
-                'Subject': {
-                    'S': 'item1-range'
-                }
-            }
+            "TableName": TEST_TABLE_NAME,
         }
         assert req.call_args[0][1] == params
 
@@ -883,34 +789,45 @@ async def test_connection_put_item():
         req.return_value = {}
         await conn.put_item(
             TEST_TABLE_NAME,
-            'item1-hash',
-            range_key='item1-range',
-            attributes={'foo': {'S': 'bar'}},
-            condition=(Path('ForumName') == 'item1-hash')
+            "item1-hash",
+            range_key="item1-range",
+            attributes={"foo": {"S": "bar"}},
+            condition=(Path("Forum").does_not_exist() & (Path("Subject") == "Foo")),
         )
         params = {
-            'TableName': TEST_TABLE_NAME,
-            'ConditionExpression': '#0 = :0',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName'
+            "ReturnConsumedCapacity": "TOTAL",
+            "TableName": TEST_TABLE_NAME,
+            "ConditionExpression": "(attribute_not_exists (#0) AND #1 = :0)",
+            "ExpressionAttributeNames": {"#0": "Forum", "#1": "Subject"},
+            "ExpressionAttributeValues": {":0": {"S": "Foo"}},
+            "Item": {
+                "ForumName": {"S": "item1-hash"},
+                "foo": {"S": "bar"},
+                "Subject": {"S": "item1-range"},
             },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'item1-hash'
-                }
+        }
+        assert req.call_args[0][1] == params
+
+    with patch(PATCH_METHOD) as req:
+        req.return_value = {}
+        await conn.put_item(
+            TEST_TABLE_NAME,
+            "item1-hash",
+            range_key="item1-range",
+            attributes={"foo": {"S": "bar"}},
+            condition=(Path("ForumName") == "item1-hash"),
+        )
+        params = {
+            "TableName": TEST_TABLE_NAME,
+            "ConditionExpression": "#0 = :0",
+            "ExpressionAttributeNames": {"#0": "ForumName"},
+            "ExpressionAttributeValues": {":0": {"S": "item1-hash"}},
+            "ReturnConsumedCapacity": "TOTAL",
+            "Item": {
+                "ForumName": {"S": "item1-hash"},
+                "foo": {"S": "bar"},
+                "Subject": {"S": "item1-range"},
             },
-            'ReturnConsumedCapacity': 'TOTAL',
-            'Item': {
-                'ForumName': {
-                    'S': 'item1-hash'
-                },
-                'foo': {
-                    'S': 'bar'
-                },
-                'Subject': {
-                    'S': 'item1-range'
-                }
-            }
         }
         assert req.call_args[0][1] == params
 
@@ -920,10 +837,10 @@ async def test_connection_transact_write_items():
     conn = Connection()
     with patch(PATCH_METHOD) as req:
         await conn.transact_write_items([], [], [], [])
-        assert req.call_args[0][0] == 'TransactWriteItems'
+        assert req.call_args[0][0] == "TransactWriteItems"
         assert req.call_args[0][1] == {
-            'TransactItems': [],
-            'ReturnConsumedCapacity': 'TOTAL'
+            "TransactItems": [],
+            "ReturnConsumedCapacity": "TOTAL",
         }
 
 
@@ -932,10 +849,10 @@ async def test_connection_transact_get_items():
     conn = Connection()
     with patch(PATCH_METHOD) as req:
         await conn.transact_get_items([])
-        assert req.call_args[0][0] == 'TransactGetItems'
+        assert req.call_args[0][0] == "TransactGetItems"
         assert req.call_args[0][1] == {
-            'TransactItems': [],
-            'ReturnConsumedCapacity': 'TOTAL'
+            "TransactItems": [],
+            "ReturnConsumedCapacity": "TOTAL",
         }
 
 
@@ -946,11 +863,9 @@ async def test_connection_batch_write_item():
     """
     items = []
     conn = Connection()
-    table_name = 'Thread'
+    table_name = "Thread"
     for i in range(10):
-        items.append(
-            {"ForumName": "FooForum", "Subject": "thread-{}".format(i)}
-        )
+        items.append({"ForumName": "FooForum", "Subject": "thread-{}".format(i)})
     with pytest.raises(ValueError):
         await conn.batch_write_item(table_name)
 
@@ -961,51 +876,188 @@ async def test_connection_batch_write_item():
         await conn.batch_write_item(
             table_name,
             put_items=items,
-            return_item_collection_metrics='SIZE',
-            return_consumed_capacity='TOTAL'
+            return_item_collection_metrics="SIZE",
+            return_consumed_capacity="TOTAL",
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'ReturnItemCollectionMetrics': 'SIZE',
-            'RequestItems': {
-                'Thread': [
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-0'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-1'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-2'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-3'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-4'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-5'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-6'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-7'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-8'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-9'}}}}
+            "ReturnConsumedCapacity": "TOTAL",
+            "ReturnItemCollectionMetrics": "SIZE",
+            "RequestItems": {
+                "Thread": [
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-0"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-1"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-2"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-3"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-4"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-5"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-6"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-7"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-8"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-9"},
+                            }
+                        }
+                    },
                 ]
-            }
+            },
         }
         assert req.call_args[0][1] == params
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        await conn.batch_write_item(
-            table_name,
-            put_items=items
-        )
+        await conn.batch_write_item(table_name, put_items=items)
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'RequestItems': {
-                'Thread': [
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-0'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-1'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-2'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-3'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-4'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-5'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-6'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-7'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-8'}}}},
-                    {'PutRequest': {'Item': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-9'}}}}
+            "ReturnConsumedCapacity": "TOTAL",
+            "RequestItems": {
+                "Thread": [
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-0"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-1"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-2"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-3"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-4"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-5"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-6"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-7"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-8"},
+                            }
+                        }
+                    },
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-9"},
+                            }
+                        }
+                    },
                 ]
-            }
+            },
         }
         assert req.call_args[0][1] == params
     with patch(PATCH_METHOD) as req:
@@ -1015,26 +1067,93 @@ async def test_connection_batch_write_item():
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        await conn.batch_write_item(
-            table_name,
-            delete_items=items
-        )
+        await conn.batch_write_item(table_name, delete_items=items)
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'RequestItems': {
-                'Thread': [
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-0'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-1'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-2'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-3'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-4'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-5'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-6'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-7'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-8'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-9'}}}}
+            "ReturnConsumedCapacity": "TOTAL",
+            "RequestItems": {
+                "Thread": [
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-0"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-1"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-2"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-3"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-4"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-5"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-6"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-7"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-8"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-9"},
+                            }
+                        }
+                    },
                 ]
-            }
+            },
         }
         assert req.call_args[0][1] == params
 
@@ -1043,26 +1162,96 @@ async def test_connection_batch_write_item():
         await conn.batch_write_item(
             table_name,
             delete_items=items,
-            return_consumed_capacity='TOTAL',
-            return_item_collection_metrics='SIZE'
+            return_consumed_capacity="TOTAL",
+            return_item_collection_metrics="SIZE",
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'ReturnItemCollectionMetrics': 'SIZE',
-            'RequestItems': {
-                'Thread': [
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-0'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-1'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-2'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-3'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-4'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-5'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-6'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-7'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-8'}}}},
-                    {'DeleteRequest': {'Key': {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-9'}}}}
+            "ReturnConsumedCapacity": "TOTAL",
+            "ReturnItemCollectionMetrics": "SIZE",
+            "RequestItems": {
+                "Thread": [
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-0"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-1"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-2"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-3"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-4"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-5"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-6"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-7"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-8"},
+                            }
+                        }
+                    },
+                    {
+                        "DeleteRequest": {
+                            "Key": {
+                                "ForumName": {"S": "FooForum"},
+                                "Subject": {"S": "thread-9"},
+                            }
+                        }
+                    },
                 ]
-            }
+            },
         }
         assert req.call_args[0][1] == params
 
@@ -1074,11 +1263,9 @@ async def test_connection_batch_get_item():
     """
     items = []
     conn = Connection()
-    table_name = 'Thread'
+    table_name = "Thread"
     for i in range(10):
-        items.append(
-            {"ForumName": "FooForum", "Subject": "thread-{}".format(i)}
-        )
+        items.append({"ForumName": "FooForum", "Subject": "thread-{}".format(i)})
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with patch(PATCH_METHOD) as req:
@@ -1088,8 +1275,8 @@ async def test_connection_batch_get_item():
                 table_name,
                 items,
                 consistent_read=True,
-                return_consumed_capacity='TOTAL',
-                attributes_to_get=['ForumName']
+                return_consumed_capacity="TOTAL",
+                attributes_to_get=["ForumName"],
             )
 
     with patch(PATCH_METHOD) as req:
@@ -1098,59 +1285,54 @@ async def test_connection_batch_get_item():
             table_name,
             items,
             consistent_read=True,
-            return_consumed_capacity='TOTAL',
-            attributes_to_get=['ForumName']
+            return_consumed_capacity="TOTAL",
+            attributes_to_get=["ForumName"],
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'RequestItems': {
-                'Thread': {
-                    'ConsistentRead': True,
-                    'ProjectionExpression': '#0',
-                    'ExpressionAttributeNames': {
-                        '#0': 'ForumName'
-                    },
-                    'Keys': [
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-0'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-1'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-2'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-3'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-4'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-5'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-6'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-7'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-8'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-9'}}
-                    ]
+            "ReturnConsumedCapacity": "TOTAL",
+            "RequestItems": {
+                "Thread": {
+                    "ConsistentRead": True,
+                    "ProjectionExpression": "#0",
+                    "ExpressionAttributeNames": {"#0": "ForumName"},
+                    "Keys": [
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-0"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-1"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-2"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-3"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-4"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-5"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-6"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-7"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-8"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-9"}},
+                    ],
                 }
-            }
+            },
         }
         assert req.call_args[0][1] == params
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        await conn.batch_get_item(
-            table_name,
-            items
-        )
+        await conn.batch_get_item(table_name, items)
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'RequestItems': {
-                'Thread': {
-                    'Keys': [
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-0'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-1'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-2'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-3'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-4'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-5'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-6'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-7'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-8'}},
-                        {'ForumName': {'S': 'FooForum'}, 'Subject': {'S': 'thread-9'}}
+            "ReturnConsumedCapacity": "TOTAL",
+            "RequestItems": {
+                "Thread": {
+                    "Keys": [
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-0"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-1"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-2"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-3"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-4"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-5"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-6"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-7"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-8"}},
+                        {"ForumName": {"S": "FooForum"}, "Subject": {"S": "thread-9"}},
                     ]
                 }
-            }
+            },
         }
         assert req.call_args[0][1] == params
 
@@ -1161,66 +1343,52 @@ async def test_connection_query():
     Connection.query
     """
     conn = Connection()
-    table_name = 'Thread'
+    table_name = "Thread"
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
-    with pytest.raises(ValueError, match="Table Thread has no index: NonExistentIndexName"):
-        await conn.query(table_name, "FooForum", limit=1, index_name='NonExistentIndexName')
+    with pytest.raises(
+        ValueError, match="Table Thread has no index: NonExistentIndexName"
+    ):
+        await conn.query(
+            table_name, "FooForum", limit=1, index_name="NonExistentIndexName"
+        )
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
         await conn.query(
             table_name,
             "FooForum",
-            Path('Subject').startswith('thread'),
+            Path("Subject").startswith("thread"),
             scan_index_forward=True,
-            return_consumed_capacity='TOTAL',
-            select='ALL_ATTRIBUTES'
+            return_consumed_capacity="TOTAL",
+            select="ALL_ATTRIBUTES",
         )
         params = {
-            'ScanIndexForward': True,
-            'Select': 'ALL_ATTRIBUTES',
-            'ReturnConsumedCapacity': 'TOTAL',
-            'KeyConditionExpression': '(#0 = :0 AND begins_with (#1, :1))',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName',
-                '#1': 'Subject'
+            "ScanIndexForward": True,
+            "Select": "ALL_ATTRIBUTES",
+            "ReturnConsumedCapacity": "TOTAL",
+            "KeyConditionExpression": "(#0 = :0 AND begins_with (#1, :1))",
+            "ExpressionAttributeNames": {"#0": "ForumName", "#1": "Subject"},
+            "ExpressionAttributeValues": {
+                ":0": {"S": "FooForum"},
+                ":1": {"S": "thread"},
             },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'FooForum'
-                },
-                ':1': {
-                    'S': 'thread'
-                }
-            },
-            'TableName': 'Thread'
+            "TableName": "Thread",
         }
         assert req.call_args[0][1] == params
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        await conn.query(
-            table_name,
-            "FooForum",
-            Path('Subject').startswith('thread')
-        )
+        await conn.query(table_name, "FooForum", Path("Subject").startswith("thread"))
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'KeyConditionExpression': '(#0 = :0 AND begins_with (#1, :1))',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName',
-                '#1': 'Subject'
+            "ReturnConsumedCapacity": "TOTAL",
+            "KeyConditionExpression": "(#0 = :0 AND begins_with (#1, :1))",
+            "ExpressionAttributeNames": {"#0": "ForumName", "#1": "Subject"},
+            "ExpressionAttributeValues": {
+                ":0": {"S": "FooForum"},
+                ":1": {"S": "thread"},
             },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'FooForum'
-                },
-                ':1': {
-                    'S': 'thread'
-                }
-            },
-            'TableName': 'Thread'
+            "TableName": "Thread",
         }
         assert req.call_args[0][1] == params
 
@@ -1230,32 +1398,22 @@ async def test_connection_query():
             table_name,
             "FooForum",
             limit=1,
-            index_name='LastPostIndex',
-            attributes_to_get=['ForumName'],
+            index_name="LastPostIndex",
+            attributes_to_get=["ForumName"],
             exclusive_start_key="FooForum",
-            consistent_read=True
+            consistent_read=True,
         )
         params = {
-            'Limit': 1,
-            'ReturnConsumedCapacity': 'TOTAL',
-            'ConsistentRead': True,
-            'ExclusiveStartKey': {
-                'ForumName': {
-                    'S': 'FooForum'
-                }
-            },
-            'IndexName': 'LastPostIndex',
-            'ProjectionExpression': '#0',
-            'KeyConditionExpression': '#0 = :0',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName'
-            },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'FooForum'
-                }
-            },
-            'TableName': 'Thread'
+            "Limit": 1,
+            "ReturnConsumedCapacity": "TOTAL",
+            "ConsistentRead": True,
+            "ExclusiveStartKey": {"ForumName": {"S": "FooForum"}},
+            "IndexName": "LastPostIndex",
+            "ProjectionExpression": "#0",
+            "KeyConditionExpression": "#0 = :0",
+            "ExpressionAttributeNames": {"#0": "ForumName"},
+            "ExpressionAttributeValues": {":0": {"S": "FooForum"}},
+            "TableName": "Thread",
         }
         assert req.call_args[0][1] == params
 
@@ -1264,27 +1422,17 @@ async def test_connection_query():
         await conn.query(
             table_name,
             "FooForum",
-            select='ALL_ATTRIBUTES',
-            exclusive_start_key="FooForum"
+            select="ALL_ATTRIBUTES",
+            exclusive_start_key="FooForum",
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'ExclusiveStartKey': {
-                'ForumName': {
-                    'S': 'FooForum'
-                }
-            },
-            'KeyConditionExpression': '#0 = :0',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName'
-            },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'FooForum'
-                }
-            },
-            'TableName': 'Thread',
-            'Select': 'ALL_ATTRIBUTES'
+            "ReturnConsumedCapacity": "TOTAL",
+            "ExclusiveStartKey": {"ForumName": {"S": "FooForum"}},
+            "KeyConditionExpression": "#0 = :0",
+            "ExpressionAttributeNames": {"#0": "ForumName"},
+            "ExpressionAttributeValues": {":0": {"S": "FooForum"}},
+            "TableName": "Thread",
+            "Select": "ALL_ATTRIBUTES",
         }
         assert req.call_args[0][1] == params
 
@@ -1295,24 +1443,19 @@ async def test_connection_scan():
     Connection.scan
     """
     conn = Connection()
-    table_name = 'Thread'
+    table_name = "Thread"
 
     conn.add_meta_table(MetaTable(DESCRIBE_TABLE_DATA[TABLE_KEY]))
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
-        await conn.scan(
-            table_name,
-            segment=0,
-            total_segments=22,
-            consistent_read=True
-        )
+        await conn.scan(table_name, segment=0, total_segments=22, consistent_read=True)
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'TableName': table_name,
-            'Segment': 0,
-            'TotalSegments': 22,
-            'ConsistentRead': True
+            "ReturnConsumedCapacity": "TOTAL",
+            "TableName": table_name,
+            "Segment": 0,
+            "TotalSegments": 22,
+            "ConsistentRead": True,
         }
         assert req.call_args[0][1] == params
 
@@ -1324,10 +1467,10 @@ async def test_connection_scan():
             total_segments=22,
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'TableName': table_name,
-            'Segment': 0,
-            'TotalSegments': 22,
+            "ReturnConsumedCapacity": "TOTAL",
+            "TableName": table_name,
+            "Segment": 0,
+            "TotalSegments": 22,
         }
         assert req.call_args[0][1] == params
 
@@ -1335,30 +1478,24 @@ async def test_connection_scan():
         req.return_value = {}
         await conn.scan(
             table_name,
-            return_consumed_capacity='TOTAL',
+            return_consumed_capacity="TOTAL",
             exclusive_start_key="FooForum",
             limit=1,
             segment=2,
             total_segments=4,
-            attributes_to_get=['ForumName'],
-            index_name='LastPostIndex',
+            attributes_to_get=["ForumName"],
+            index_name="LastPostIndex",
         )
         params = {
-            'ProjectionExpression': '#0',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName'
-            },
-            'ExclusiveStartKey': {
-                "ForumName": {
-                    "S": "FooForum"
-                }
-            },
-            'TableName': table_name,
-            'Limit': 1,
-            'Segment': 2,
-            'TotalSegments': 4,
-            'ReturnConsumedCapacity': 'TOTAL',
-            'IndexName': 'LastPostIndex'
+            "ProjectionExpression": "#0",
+            "ExpressionAttributeNames": {"#0": "ForumName"},
+            "ExclusiveStartKey": {"ForumName": {"S": "FooForum"}},
+            "TableName": table_name,
+            "Limit": 1,
+            "Segment": 2,
+            "TotalSegments": 4,
+            "ReturnConsumedCapacity": "TOTAL",
+            "IndexName": "LastPostIndex",
         }
         assert req.call_args[0][1] == params
 
@@ -1367,34 +1504,21 @@ async def test_connection_scan():
         await conn.scan(
             table_name,
         )
-        params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'TableName': table_name
-        }
+        params = {"ReturnConsumedCapacity": "TOTAL", "TableName": table_name}
         assert req.call_args[0][1] == params
 
     with patch(PATCH_METHOD) as req:
         req.return_value = {}
         await conn.scan(
             table_name,
-            Path('ForumName').startswith('Foo') & Path('Subject').contains('Foo')
+            Path("ForumName").startswith("Foo") & Path("Subject").contains("Foo"),
         )
         params = {
-            'ReturnConsumedCapacity': 'TOTAL',
-            'TableName': table_name,
-            'FilterExpression': '(begins_with (#0, :0) AND contains (#1, :1))',
-            'ExpressionAttributeNames': {
-                '#0': 'ForumName',
-                '#1': 'Subject'
-            },
-            'ExpressionAttributeValues': {
-                ':0': {
-                    'S': 'Foo'
-                },
-                ':1': {
-                    'S': 'Foo'
-                }
-            }
+            "ReturnConsumedCapacity": "TOTAL",
+            "TableName": table_name,
+            "FilterExpression": "(begins_with (#0, :0) AND contains (#1, :1))",
+            "ExpressionAttributeNames": {"#0": "ForumName", "#1": "Subject"},
+            "ExpressionAttributeValues": {":0": {"S": "Foo"}, ":1": {"S": "Foo"}},
         }
         assert req.call_args[0][1] == params
 
@@ -1404,156 +1528,180 @@ async def test_connection_scan():
             await conn.scan(table_name)
 
 
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
 @pytest.mark.asyncio
 async def test_connection__make_api_call__wraps_verbose_client_error_create(send_mock):
     response = AioAWSResponse(
-        url='',
+        url="",
         status_code=500,
         raw=mock.AsyncMock(raw_headers=[]),
-        headers={'X-Amzn-RequestId': 'abcdef'},
+        headers={"X-Amzn-RequestId": "abcdef"},
     )
-    response._content = json.dumps({
-        '__type': 'InternalServerError',
-        'message': 'There is a problem',
-        'code': 'InternalServerError',
-    }).encode('utf-8')
+    response._content = json.dumps(
+        {
+            "__type": "InternalServerError",
+            "message": "There is a problem",
+            "code": "InternalServerError",
+        }
+    ).encode("utf-8")
     send_mock.return_value = response
 
     c = Connection(max_retry_attempts=0)
 
     with pytest.raises(VerboseClientError) as excinfo:
-        await c._make_api_call('CreateTable', {'TableName': 'MyTable'})
+        await c._make_api_call("CreateTable", {"TableName": "MyTable"})
     assert (
-            'on table (MyTable) when calling the CreateTable operation: There is a problem'
-            in str(excinfo.value)
+        "on table (MyTable) when calling the CreateTable operation: There is a problem"
+        in str(excinfo.value)
     )
+
 
 @pytest.mark.asyncio
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
-async def test_connection__make_api_call__wraps_verbose_client_error_create_message(send_mock):
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
+async def test_connection__make_api_call__wraps_verbose_client_error_create_message(
+    send_mock,
+):
     response = AioAWSResponse(
-        url='',
+        url="",
         status_code=500,
         raw=mock.AsyncMock(raw_headers=[]),
-        headers={'X-Amzn-RequestId': 'abcdef'},
+        headers={"X-Amzn-RequestId": "abcdef"},
     )
-    response._content = json.dumps({
-        '__type': 'InternalServerError',
-        'message': 'There is a problem',
-        'code': 'InternalServerError',
-    }).encode('utf-8')
+    response._content = json.dumps(
+        {
+            "__type": "InternalServerError",
+            "message": "There is a problem",
+            "code": "InternalServerError",
+        }
+    ).encode("utf-8")
     send_mock.return_value = response
 
     c = Connection(max_retry_attempts=0)
 
     with pytest.raises(VerboseClientError) as excinfo:
-        await c._make_api_call('CreateTable', {'TableName': 'MyTable'})
-    assert (
-            ' on table (MyTable) when calling the CreateTable operation'
-            in str(excinfo.value)
+        await c._make_api_call("CreateTable", {"TableName": "MyTable"})
+    assert " on table (MyTable) when calling the CreateTable operation" in str(
+        excinfo.value
     )
 
 
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
 @pytest.mark.asyncio
 async def test_connection__make_api_call__wraps_verbose_client_error_batch(send_mock):
     response = AioAWSResponse(
-        url='',
+        url="",
         status_code=500,
         raw=mock.AsyncMock(raw_headers=[]),
-        headers={'X-Amzn-RequestId': 'abcdef'},
+        headers={"X-Amzn-RequestId": "abcdef"},
     )
-    response._content = json.dumps({
-        '__type': 'InternalServerError',
-        'message': 'There is a problem',
-        'code': 'InternalServerError',
-    }).encode('utf-8')
+    response._content = json.dumps(
+        {
+            "__type": "InternalServerError",
+            "message": "There is a problem",
+            "code": "InternalServerError",
+        }
+    ).encode("utf-8")
     send_mock.return_value = response
 
     c = Connection(max_retry_attempts=0)
 
     with pytest.raises(VerboseClientError) as excinfo:
-        await c._make_api_call('BatchGetItem', {
-            'RequestItems': {
-                'table_one': {
-                    "Keys": [
-                        {"ID": {"S": "1"}},
-                        {"ID": {"S": "2"}},
-                    ]
-                },
-                'table_two': {
-                    "Keys": [
-                        {"ID": {"S": "3"}}
-                    ],
-                },
-            },
-        })
-    assert (
-            'on table (table_one,table_two) when calling the BatchGetItem operation'
-            in str(excinfo.value)
-    )
-
-
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
-@pytest.mark.asyncio
-async def test_connection__make_api_call__wraps_verbose_client_error_transact(send_mock):
-    response = AioAWSResponse(
-        url='',
-        status_code=500,
-        raw=mock.AsyncMock(raw_headers=[]),
-        headers={'X-Amzn-RequestId': 'abcdef'},
-    )
-    response._content = json.dumps({
-        '__type': 'InternalServerError',
-        'message': 'There is a problem',
-        'code': 'InternalServerError',
-    }).encode('utf-8')
-    send_mock.return_value = response
-
-    c = Connection(max_retry_attempts=0)
-
-    with pytest.raises(VerboseClientError) as excinfo:
-        await c._make_api_call('TransactWriteItems', {
-            'ClientRequestToken': "some_token",
-            'TransactItems': [
-                {
-                    'Put': {
-                        'Item': {'id': {'S': 'item_id_one'}},
-                        'TableName': 'table_one',
+        await c._make_api_call(
+            "BatchGetItem",
+            {
+                "RequestItems": {
+                    "table_one": {
+                        "Keys": [
+                            {"ID": {"S": "1"}},
+                            {"ID": {"S": "2"}},
+                        ]
+                    },
+                    "table_two": {
+                        "Keys": [{"ID": {"S": "3"}}],
                     },
                 },
-                {
-                    'Update': {
-                        'Key': {'id': {'S': 'item_id_two'}},
-                        'TableName': 'table_two',
-                    }
-                },
-            ],
-        })
+            },
+        )
     assert (
-            'on table (table_one,table_two) when calling the TransactWriteItems operation'
-            in str(excinfo.value)
+        "on table (table_one,table_two) when calling the BatchGetItem operation"
+        in str(excinfo.value)
     )
 
 
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
 @pytest.mark.asyncio
-async def test_connection__make_api_call_throws_verbose_error_after_backoff_later_succeeds(send_mock):
+async def test_connection__make_api_call__wraps_verbose_client_error_transact(
+    send_mock,
+):
+    response = AioAWSResponse(
+        url="",
+        status_code=500,
+        raw=mock.AsyncMock(raw_headers=[]),
+        headers={"X-Amzn-RequestId": "abcdef"},
+    )
+    response._content = json.dumps(
+        {
+            "__type": "InternalServerError",
+            "message": "There is a problem",
+            "code": "InternalServerError",
+        }
+    ).encode("utf-8")
+    send_mock.return_value = response
+
+    c = Connection(max_retry_attempts=0)
+
+    with pytest.raises(VerboseClientError) as excinfo:
+        await c._make_api_call(
+            "TransactWriteItems",
+            {
+                "ClientRequestToken": "some_token",
+                "TransactItems": [
+                    {
+                        "Put": {
+                            "Item": {"id": {"S": "item_id_one"}},
+                            "TableName": "table_one",
+                        },
+                    },
+                    {
+                        "Update": {
+                            "Key": {"id": {"S": "item_id_two"}},
+                            "TableName": "table_two",
+                        }
+                    },
+                ],
+            },
+        )
+    assert (
+        "on table (table_one,table_two) when calling the TransactWriteItems operation"
+        in str(excinfo.value)
+    )
+
+
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
+@pytest.mark.asyncio
+async def test_connection__make_api_call_throws_verbose_error_after_backoff_later_succeeds(
+    send_mock,
+):
     # mock response
-    text = json.dumps({'message': 'There is a problem', '__type': 'InternalServerError'})
+    text = json.dumps(
+        {"message": "There is a problem", "__type": "InternalServerError"}
+    )
     bad_response = MockResponse(
         spec=AioAWSResponse,
         text=text,
         status_code=500,
         _content=text.encode(),
         raw=mock.AsyncMock(raw_headers=[]),
-        headers={'x-amzn-RequestId': 'abcdef'},
+        headers={"x-amzn-RequestId": "abcdef"},
     )
 
     good_response_content = {
-        'TableDescription': {'TableName': 'table', 'TableStatus': 'Creating'},
-        'ResponseMetadata': {'HTTPHeaders': {}, 'HTTPStatusCode': 200, 'RetryAttempts': 2},
+        "TableDescription": {"TableName": "table", "TableStatus": "Creating"},
+        "ResponseMetadata": {
+            "HTTPHeaders": {},
+            "HTTPStatusCode": 200,
+            "RetryAttempts": 2,
+        },
     }
     text = json.dumps(good_response_content)
 
@@ -1574,45 +1722,46 @@ async def test_connection__make_api_call_throws_verbose_error_after_backoff_late
 
     c = Connection()
 
-    assert await c._make_api_call('CreateTable', {'TableName': 'MyTable'})
+    assert await c._make_api_call("CreateTable", {"TableName": "MyTable"})
     assert len(send_mock.mock_calls) == 3
 
 
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
 @pytest.mark.asyncio
 async def test_connection_make_api_call__retries_properly(send_mock):
     deserializable_response = AioAWSResponse(
-        url='',
+        url="",
         status_code=200,
         headers={},
         raw=mock.AsyncMock(raw_headers=[]),
     )
-    deserializable_response._content = json.dumps({'hello': 'world'}).encode('utf-8')
+    deserializable_response._content = json.dumps({"hello": "world"}).encode("utf-8")
 
     bad_response = AioAWSResponse(
-        url='',
+        url="",
         status_code=503,
         headers={},
         raw=mock.AsyncMock(raw_headers=[]),
-
     )
-    bad_response._content = 'not_json'.encode('utf-8')
+    bad_response._content = "not_json".encode("utf-8")
 
     send_mock.side_effect = [
         bad_response,
-        botocore.exceptions.ReadTimeoutError(endpoint_url='http://lyft.com'),
+        botocore.exceptions.ReadTimeoutError(endpoint_url="http://lyft.com"),
         bad_response,
         deserializable_response,
     ]
     c = Connection(max_retry_attempts=3)
 
-    await c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
+    await c._make_api_call("DescribeTable", {"TableName": "MyTable"})
     assert len(send_mock.mock_calls) == 4
 
 
 @pytest.mark.asyncio
 async def test_connection__botocore_config():
-    c = Connection(connect_timeout_seconds=5, read_timeout_seconds=10, max_pool_connections=20)
+    c = Connection(
+        connect_timeout_seconds=5, read_timeout_seconds=10, max_pool_connections=20
+    )
     assert (await c.client())._client_config.connect_timeout == 5
     assert (await c.client())._client_config.read_timeout == 10
     assert (await c.client())._client_config.max_pool_connections == 20
@@ -1626,37 +1775,41 @@ async def test_connection_make_api_call___extra_headers(mocker):
         status_code=200,
         headers={},
         raw=mock.AsyncMock(raw_headers=[]),
-        _content=b'{}',
-        text='{}',
+        _content=b"{}",
+        text="{}",
     )
-    send_mock = mocker.patch('aiobotocore.httpsession.AIOHTTPSession.send', return_value=good_response)
+    send_mock = mocker.patch(
+        "aiobotocore.httpsession.AIOHTTPSession.send", return_value=good_response
+    )
 
     # return constant UUID
-    mocker.patch('uuid.uuid4', return_value=UUID('01FC4BDB-B223-4B86-88F4-DEE79B77F275'))
+    mocker.patch(
+        "uuid.uuid4", return_value=UUID("01FC4BDB-B223-4B86-88F4-DEE79B77F275")
+    )
 
-    c = Connection(extra_headers={'foo': 'bar'}, max_retry_attempts=0)
+    c = Connection(extra_headers={"foo": "bar"}, max_retry_attempts=0)
     await c._make_api_call(
-        'DescribeTable',
-        {'TableName': 'MyTable'},
+        "DescribeTable",
+        {"TableName": "MyTable"},
     )
 
     assert send_mock.call_count == 1
     request = send_mock.call_args[0][0]
-    assert request.headers['foo'] == 'bar'
+    assert request.headers["foo"] == "bar"
 
-    c = Connection(extra_headers={'foo': 'baz'}, max_retry_attempts=0)
+    c = Connection(extra_headers={"foo": "baz"}, max_retry_attempts=0)
     await c._make_api_call(
-        'DescribeTable',
-        {'TableName': 'MyTable'},
+        "DescribeTable",
+        {"TableName": "MyTable"},
     )
 
     assert send_mock.call_count == 2
     request2 = send_mock.call_args[0][0]
     # all headers, including signatures, and except 'foo', should match
-    assert {**request.headers, 'foo': ''} == {**request2.headers, 'foo': ''}
+    assert {**request.headers, "foo": ""} == {**request2.headers, "foo": ""}
 
 
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
 @pytest.mark.asyncio
 async def test_connection_make_api_call__throws_when_retries_exhausted(send_mock):
     send_mock.side_effect = [
@@ -1668,54 +1821,49 @@ async def test_connection_make_api_call__throws_when_retries_exhausted(send_mock
     c = Connection(max_retry_attempts=3)
 
     with pytest.raises(botocore.exceptions.ReadTimeoutError):
-        await c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
+        await c._make_api_call("DescribeTable", {"TableName": "MyTable"})
 
     assert len(send_mock.mock_calls) == 4
 
 
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
 @pytest.mark.asyncio
 async def test_connection_make_api_call__throws_retry_disabled(send_mock):
     send_mock.side_effect = [
-        botocore.exceptions.ReadTimeoutError(endpoint_url='http://lyft.com'),
+        botocore.exceptions.ReadTimeoutError(endpoint_url="http://lyft.com"),
     ]
     c = Connection(read_timeout_seconds=11, max_retry_attempts=0)
 
     with pytest.raises(botocore.exceptions.ReadTimeoutError):
-        await c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
+        await c._make_api_call("DescribeTable", {"TableName": "MyTable"})
 
     assert len(send_mock.mock_calls) == 1
 
 
-# @mock.patch('urllib3.connectionpool.HTTPConnectionPool.urlopen')
-# @pytest.mark.asyncio
-# async def test_connection_make_api_call__throws_conn_closed(urlopen_mock):
-#     urlopen_mock.side_effect = [
-#         urllib3.exceptions.ProtocolError(),
-#     ]
-#     c = Connection(read_timeout_seconds=11, max_retry_attempts=0)
-#
-#     # with pytest.raises(botocore.exceptions.ConnectionClosedError):
-#     res = await c._make_api_call('DescribeTable', {'TableName': 'MyTable'})
-#     print(res)
-
-
-@mock.patch('aiobotocore.httpsession.AIOHTTPSession.send')
+@mock.patch("aiobotocore.httpsession.AIOHTTPSession.send")
 @pytest.mark.asyncio
 async def test_connection_make_api_call__binary_attributes(send_mock):
-    binary_blob = b'\x00\xFF\x00\xFF'
-    resp_text = json.dumps({
-        UNPROCESSED_ITEMS: {
-            'someTable': [{
-                'PutRequest': {
-                    'Item': {
-                        'name': {STRING: 'daniel'},
-                        'picture': {BINARY: base64.b64encode(binary_blob).decode(DEFAULT_ENCODING)},
+    binary_blob = b"\x00\xff\x00\xff"
+    resp_text = json.dumps(
+        {
+            UNPROCESSED_ITEMS: {
+                "someTable": [
+                    {
+                        "PutRequest": {
+                            "Item": {
+                                "name": {STRING: "daniel"},
+                                "picture": {
+                                    BINARY: base64.b64encode(binary_blob).decode(
+                                        DEFAULT_ENCODING
+                                    )
+                                },
+                            }
+                        }
                     }
-                }
-            }],
+                ],
+            }
         }
-    })
+    )
 
     resp = MockResponse(
         spec=AioAWSResponse,
@@ -1729,16 +1877,15 @@ async def test_connection_make_api_call__binary_attributes(send_mock):
 
     conn = Connection(REGION)
 
-    resp = await conn._make_api_call('BatchWriteItem', {'RequestItems': {}})
+    resp = await conn._make_api_call("BatchWriteItem", {"RequestItems": {}})
 
-    assert resp['UnprocessedItems']['someTable'] == [{
-        'PutRequest': {
-            'Item': {
-                'name': {STRING: 'daniel'},
-                'picture': {BINARY: binary_blob}
+    assert resp["UnprocessedItems"]["someTable"] == [
+        {
+            "PutRequest": {
+                "Item": {"name": {STRING: "daniel"}, "picture": {BINARY: binary_blob}}
             }
         }
-    }]
+    ]
 
 
 @pytest.mark.asyncio
@@ -1747,14 +1894,14 @@ async def test_connection_update_time_to_live__fail():
     with patch(PATCH_METHOD) as req:
         req.side_effect = BotoCoreError
         with pytest.raises(TableError):
-            await conn.update_time_to_live('test table', 'my_ttl')
+            await conn.update_time_to_live("test table", "my_ttl")
 
 
 @pytest.mark.asyncio
 async def test_connection_close():
     """close() cleans up client and state."""
     session_mock = make_session_mock()
-    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
         conn = Connection(REGION)
         await conn.client()
         assert conn._client is not None
@@ -1768,7 +1915,7 @@ async def test_connection_close():
 async def test_connection_close_idempotent():
     """close() can be called multiple times without error."""
     session_mock = make_session_mock()
-    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
         conn = Connection(REGION)
         await conn.client()
 
@@ -1789,7 +1936,7 @@ async def test_connection_close_without_client():
 async def test_connection_async_context_manager():
     """Connection works as an async context manager."""
     session_mock = make_session_mock()
-    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
         async with Connection(REGION) as conn:
             await conn.client()
             assert conn._client is not None
@@ -1800,7 +1947,23 @@ async def test_connection_async_context_manager():
 async def test_connection_client_recreated_after_close():
     """client() works normally after close()."""
     session_mock = make_session_mock()
-    with patch('aiopynamodb.connection.Connection.session', new=session_mock):
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
+        conn = Connection(REGION)
+
+        await conn.client()
+        assert conn._client is not None
+
+        await conn.close()
+        assert conn._client is None
+
+        await conn.client()
+        assert conn._client is not None
+
+
+async def test_connection_client_recreated_after_close():
+    """client() works normally after close()."""
+    session_mock = make_session_mock()
+    with patch("aiopynamodb.connection.Connection.session", new=session_mock):
         conn = Connection(REGION)
 
         await conn.client()

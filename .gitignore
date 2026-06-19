@@ -32,8 +32,12 @@ dist/
 [#]*[#]
 *~
 
-# Ingore virtualenv stuff
-venv
+# Ignore virtualenvs
+venv/
+.venv/
+.venv*/
+env/
+ENV/
 
 # Some Python specific stuff
 *.py[cod]
@@ -70,3 +74,8 @@ build/
 
 # Ignore built docs
 docs/_build/
+
+# Local verification artifacts
+.pytest_cache/
+dynamodb-local-metadata.json
+.tmp-dynamodb-local/

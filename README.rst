@@ -6,17 +6,13 @@ This fork tracks `brunobelloni/AioPynamoDB <https://github.com/brunobelloni/AioP
 
 Installation
 ============
-From PyPI for this fork::
+From PyPI::
 
     $ pip install as-aiopynamodb -U
 
-From GitHub for this fork::
+From GitHub::
 
     $ pip install git+https://github.com/AppSolves/AioPynamoDB#egg=as-aiopynamodb
-
-From upstream PyPI::
-
-    $ pip install aiopynamodb
 
 Basic Usage
 ===========
